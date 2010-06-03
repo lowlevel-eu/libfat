@@ -27,7 +27,8 @@ int fat_fs_mount(struct fat_fs* fs)
     if (fs->bpb.total_sectors != 0) {
         total_sectors = fs->bpb.total_sectors;
     } else {
-        total_sectors = 42; // FIXME fs->bpb.total_sectors_large
+        // TODO Hier ist auf jeden Fall FAT32, egal wie viele Cluster
+        total_sectors = fs->bpb.total_sectors_large;
     }
 
     rootdir_sectors =
@@ -40,8 +41,10 @@ int fat_fs_mount(struct fat_fs* fs)
 
     if (data_sectors < 4085) {
         fs->type = FS_TYPE_FAT12;
-    } else {
+    } else if (data_sectors < 65525) {
         fs->type = FS_TYPE_FAT16;
+    } else {
+        fs->type = FS_TYPE_FAT32;
     }
 
 
