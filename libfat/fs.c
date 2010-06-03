@@ -21,6 +21,7 @@ int fat_fs_mount(struct fat_fs* fs)
 
     // FAT-Variante bestimmen
     uint32_t total_sectors;
+    uint32_t rootdir_sectors;
     uint32_t data_sectors;
 
     if (fs->bpb.total_sectors != 0) {
@@ -29,9 +30,21 @@ int fat_fs_mount(struct fat_fs* fs)
         total_sectors = 42; // FIXME fs->bpb.total_sectors_large
     }
 
-    data_sectors = total_sectors;
+    rootdir_sectors =
+        (fs->bpb.rootdir_size * sizeof(struct fat_direntry) + 511) / 512;
 
-    fs->type = FS_TYPE_FAT12;
+    data_sectors = total_sectors
+        - fs->bpb.reserved_sectors
+        - (fs->bpb.num_fats * fs->bpb.fat_sectors)
+        - rootdir_sectors;
+
+    if (data_sectors < 4085) {
+        fs->type = FS_TYPE_FAT12;
+    } else {
+        fs->type = FS_TYPE_FAT16;
+    }
+
+
     fs->total_sectors = total_sectors;
 
     return 1;

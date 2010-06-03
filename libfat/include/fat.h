@@ -47,9 +47,9 @@ struct fat_bpb {
     char        os_name[8];
     uint16_t    sector_size;
     uint8_t     cluster_sectors;
-    uint16_t    num_reserved_sectors;
+    uint16_t    reserved_sectors;
     uint8_t     num_fats;
-    uint16_t    root_dir_size;
+    uint16_t    rootdir_size;
     uint16_t    total_sectors;
     uint8_t     media_type;
     uint16_t    fat_sectors;
@@ -221,5 +221,9 @@ int fat_fs_unmount(struct fat_fs* fs);
  * Saetmliche gecachten Daten auf die Platte schreiben
  */
 void fat_fs_sync(struct fat_fs* fs);
+
+struct fat_direntry {
+    uint8_t data[32];
+} __attribute__((packed));
 
 #endif
