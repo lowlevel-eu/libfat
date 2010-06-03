@@ -1,0 +1,57 @@
+#include <stdio.h>
+#include "fat.h"
+
+/**
+ * fat-Dateisystem einbinden. Dafuer muessen dev_read, dev_write und
+ * dev_private (falls notwendig) initialisiert sein.
+ *
+ * @return 1 bei Erfolg, im Fehlerfall 0
+ */
+int fat_fs_mount(struct fat_fs* fs)
+{
+    // BPB einlesen
+    if (!fs->dev_read(0, 512, &fs->bpb, fs->dev_private)) {
+        return 0;
+    }
+
+    // Magic pruefen
+    if (fs->bpb.magic != 0xaa55) {
+        return 0;
+    }
+
+    // FAT-Variante bestimmen
+    uint32_t total_sectors;
+    uint32_t data_sectors;
+
+    if (fs->bpb.total_sectors != 0) {
+        total_sectors = fs->bpb.total_sectors;
+    } else {
+        total_sectors = 42; // FIXME fs->bpb.total_sectors_large
+    }
+
+    data_sectors = total_sectors;
+
+    fs->type = FS_TYPE_FAT12;
+    fs->total_sectors = total_sectors;
+
+    return 1;
+}
+
+/**
+ * fat-Dateisystem aushaengen. Dabei werden saemtliche gecachten Daten auf die
+ * Platte geschrieben. Die Member sb und cache_handle in der fs-Struktur sind
+ * danach NULL.
+ *
+ * @return 1 bei Erfolg, im Fehlerfall 0
+ */
+int fat_fs_unmount(struct fat_fs* fs)
+{
+    return 0;
+}
+
+/**
+ * Saetmliche gecachten Daten auf die Platte schreiben
+ */
+void fat_fs_sync(struct fat_fs* fs)
+{
+}
