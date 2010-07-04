@@ -32,7 +32,7 @@ int fat_fs_mount(struct fat_fs* fs)
     }
 
     rootdir_sectors =
-        (fs->bpb.rootdir_size * sizeof(struct fat_direntry) + 511) / 512;
+        (fs->bpb.rootdir_length * sizeof(struct fat_dir_entry) + 511) / 512;
 
     data_sectors = total_sectors
         - fs->bpb.reserved_sectors
