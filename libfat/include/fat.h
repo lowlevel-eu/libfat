@@ -187,6 +187,13 @@ int fat_fs_unmount(struct fat_fs* fs);
  */
 void fat_fs_sync(struct fat_fs* fs);
 
+#define FAT_ATTRIB_READONLY 0x01
+#define FAT_ATTRIB_HIDDEN   0x02
+#define FAT_ATTRIB_SYSTEM   0x04
+#define FAT_ATTRIB_VOLUME   0x08
+#define FAT_ATTRIB_DIR      0x10
+#define FAT_ATTRIB_ARCHIVE  0x20
+
 struct fat_disk_dir_entry {
     char name[8];
     char ext[3];
