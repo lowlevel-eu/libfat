@@ -99,6 +99,9 @@ int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry)
 
     short_fn_to_string(&dir->entries[dir->i], entry->name);
 
+    entry->first_cluster = dir->entries[dir->i].first_cluster;
+    entry->size = dir->entries[dir->i].size;
+
     dir->i++;
     return 0;
 }

@@ -4,6 +4,18 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#ifdef CDI_HAS_ERRNO
+#include <errno.h>
+#define FAT_ENOENT ENOENT
+#define FAT_EIO EIO
+#else
+#define FAT_ENOENT 1
+#define FAT_EIO 2
+#endif
+
+// TODO Nur fuer Debugging - spaeter entfernen
+#include <stdio.h>
+
 /**
  * BIOS Parameter Block
  */
@@ -146,6 +158,7 @@ struct fat_fs {
 
     enum fat_type type;
     uint32_t total_sectors;
+    uint32_t first_data_cluster;
 };
 
 /**
@@ -198,12 +211,16 @@ struct fat_disk_dir_entry {
     char name[8];
     char ext[3];
     uint8_t attrib;
-    uint8_t data[20];
+    uint8_t data[14];
+    uint16_t first_cluster;
+    uint32_t size;
 } __attribute__((packed));
 
 
 struct fat_dir_entry {
     char name[13]; /* 8.3 plus \0 */
+    int first_cluster;
+    uint32_t size;
 };
 
 struct fat_dir {
@@ -216,5 +233,16 @@ struct fat_dir {
 int fat_dir_open(struct fat_fs* fs, const char* path, struct fat_dir* dir);
 int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry);
 int fat_dir_close(struct fat_dir* dir);
+
+struct fat_file {
+    struct fat_fs* fs;
+    int cluster;
+    uint32_t size;
+};
+
+int fat_file_open(struct fat_fs* fs, const char* path, struct fat_file* file);
+int32_t fat_file_read(struct fat_file* file, void *buf, uint32_t offset,
+    size_t len);
+int fat_file_close(struct fat_file* file);
 
 #endif
