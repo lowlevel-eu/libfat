@@ -126,11 +126,9 @@ int fat_file_open(struct fat_fs* fs, const char* path, struct fat_file* file)
 
 static uint32_t file_get_cluster(struct fat_file* file, uint32_t file_cluster)
 {
-#if 0
-    if (file_cluster > file->blocklist_size) {
+    if (file_cluster >= file->blocklist_size) {
         return 0;
     }
-#endif
 
     return file->blocklist[file_cluster];
 }
@@ -184,30 +182,53 @@ int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
     uint32_t disk_cluster;
     uint32_t offset_in_cluster;
 
+    /* Bei Ueberlaenge Fehler zurueckgeben */
+    if (offset + len > file->size) {
+        return -FAT_EIO;
+    }
+
+    /* Angefangener Cluster am Anfang */
     offset_in_cluster = offset & (cluster_size - 1);
     if (offset_in_cluster) {
         uint32_t count = MIN(n, cluster_size - offset_in_cluster);
+
         disk_cluster = file_get_cluster(file, file_cluster++);
+        if (disk_cluster == 0) {
+            return -FAT_EIO;
+        }
+
         ret = read_cluster_part(fs, p, disk_cluster, offset_in_cluster, count);
         if (ret < 0) {
             return ret;
         }
+
         p += count;
         n -= count;
     }
 
+    /* Eine beliebige Anzahl von ganzen Clustern in der Mitte */
     while (n >= cluster_size) {
         disk_cluster = file_get_cluster(file, file_cluster++);
+        if (disk_cluster == 0) {
+            return -FAT_EIO;
+        }
+
         ret = read_cluster(fs, p, disk_cluster);
         if (ret < 0) {
             return ret;
         }
+
         p += cluster_size;
         n -= cluster_size;
     }
 
+    /* Und wieder ein angefangener Cluster am Ende */
     if (n) {
         disk_cluster = file_get_cluster(file, file_cluster);
+        if (disk_cluster == 0) {
+            return -FAT_EIO;
+        }
+
         ret = read_cluster_part(fs, p, disk_cluster, 0, n);
         if (ret < 0) {
             return ret;

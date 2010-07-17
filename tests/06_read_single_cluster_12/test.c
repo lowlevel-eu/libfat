@@ -25,12 +25,16 @@ int run_test(struct fat_fs* fs)
         test_error("Konnte Datei /test.txt nicht oeffnen");
     }
 
-    ret = fat_file_read(&file, buf, 0, 512);
+    if (file.size != 13) {
+        test_error("Datei /test.txt hat falsche Groesse: %d", file.size);
+    }
+
+    ret = fat_file_read(&file, buf, 0, file.size);
     if (ret < 0) {
         test_error("Konnt nicht aus Datei lesen (%d)", ret);
     }
 
-    if (strcmp(buf, "Hallo heimur\n")) {
+    if (strncmp(buf, "Hallo heimur\n", 13)) {
         test_error("Gelesen: '%s'", buf);
     }
 

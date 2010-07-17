@@ -76,7 +76,22 @@ int run_test(struct fat_fs* fs)
         test_error("Aus der Mitte gelesen: '%s'", buf);
     }
 
-    /* Aufraeumen */
+    /* Einmal nach Ende der Datei lesen */
+    ret = fat_file_read(&file, buf, 100000, 10);
+    if (ret >= 0) {
+        test_error("[1] Konnte nach Ende der Datei lesen");
+    }
+
+    ret = fat_file_read(&file, buf, 13310, 10);
+    if (ret >= 0) {
+        test_error("[2] Konnte nach Ende der Datei lesen");
+    }
+
+    ret = fat_file_read(&file, buf, 12999, 10);
+    if (ret >= 0) {
+        test_error("[3] Konnte nach Ende der Datei lesen");
+    }
+
     if (fat_file_close(&file) < 0) {
         test_error("Konnte Datei nicht schliessen");
     }
