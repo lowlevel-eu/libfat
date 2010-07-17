@@ -1,14 +1,65 @@
 #include <string.h>
+#include <assert.h>
 
 #include "fat.h"
+
+#define NUM_CLUSTERS(x, cluster_size) \
+    (((x) + (cluster_size) - 1) / (cluster_size))
+#define SECTOR_BITS (512 * 8)
+
+// FIXME Sektorgroesse != 512
+
+static uint32_t get_next_cluster(struct fat_fs* fs, uint32_t cluster)
+{
+    uint8_t buf[1024];
+    uint32_t fat_bit_offset = (cluster * 12ULL);
+    uint32_t fat_sector = fat_bit_offset / SECTOR_BITS;
+    uint16_t value;
+
+    fat_sector += fs->bpb.reserved_sectors;
+    fat_bit_offset %= SECTOR_BITS;
+
+    if (!fs->dev_read(fat_sector * 512, 1024, buf, fs->dev_private)) {
+        return 0;
+    }
+
+    value = *((uint16_t*) &buf[fat_bit_offset / 8]);
+    if ((fat_bit_offset & 7) == 0) {
+        value &= 0xFFF;
+    } else {
+        value >>= 4;
+    }
+
+    return value;
+}
 
 int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
     struct fat_file* file)
 {
+    uint32_t cluster_size = fs->bpb.cluster_sectors * 512;
+    uint32_t i;
+
     file->fs = fs;
-    file->cluster = entry->first_cluster;
     file->size = entry->size;
+
+    /* Blockliste anlegen und einlesen */
+    file->blocklist_size = NUM_CLUSTERS(file->size, cluster_size);
+    file->blocklist = malloc(file->blocklist_size * sizeof(uint32_t));
+
+    file->blocklist[0] = entry->first_cluster;
+    for (i = 1; i < file->blocklist_size; i++) {
+        file->blocklist[i] = get_next_cluster(fs, file->blocklist[i - 1]);
+
+        if (file->blocklist[i] == 0) {
+            goto fail;
+        }
+    }
+
     return 0;
+
+fail:
+    free(file->blocklist);
+    return -FAT_EIO;
 }
 
 int fat_file_open(struct fat_fs* fs, const char* path, struct fat_file* file)
@@ -48,6 +99,17 @@ int fat_file_open(struct fat_fs* fs, const char* path, struct fat_file* file)
     return fat_file_open_by_dir_entry(fs, &dentry, file);
 }
 
+static uint32_t file_get_cluster(struct fat_file* file, uint32_t file_cluster)
+{
+#if 0
+    if (file_cluster > file->blocklist_size) {
+        return 0;
+    }
+#endif
+
+    return file->blocklist[file_cluster];
+}
+
 static int64_t get_data_cluster_offset(struct fat_fs* fs, uint32_t cluster_idx)
 {
     uint32_t cluster = fs->first_data_cluster + (cluster_idx - 2);
@@ -55,21 +117,86 @@ static int64_t get_data_cluster_offset(struct fat_fs* fs, uint32_t cluster_idx)
     return (cluster * fs->bpb.cluster_sectors) * 512;
 }
 
-int32_t fat_file_read(struct fat_file* file, void *buf, uint32_t offset,
-    size_t len)
+static int read_cluster(struct fat_fs* fs, void* buf, uint32_t cluster_idx)
 {
-    struct fat_fs* fs = file->fs;
-    uint32_t cluster_offset = get_data_cluster_offset(fs, file->cluster);
+    uint32_t cluster_size = fs->bpb.cluster_sectors * 512;
+    uint32_t cluster_offset = get_data_cluster_offset(fs, cluster_idx);
 
-    if (!fs->dev_read(cluster_offset, len, buf, fs->dev_private)) {
+    if (!fs->dev_read(cluster_offset, cluster_size, buf, fs->dev_private)) {
         return -FAT_EIO;
     }
 
+    return 0;
+}
 
-    return file->size;
+static int read_cluster_part(struct fat_fs* fs, void* buf,
+    uint32_t cluster_idx,  size_t offset, size_t len)
+{
+    uint32_t cluster_size = fs->bpb.cluster_sectors * 512;
+    uint8_t cluster[cluster_size];
+    int ret;
+
+    assert (offset + len <= cluster_size);
+
+    ret = read_cluster(fs, cluster, cluster_idx);
+    if (ret < 0) {
+        return ret;
+    }
+
+    memcpy(buf, cluster + offset, len);
+    return 0;
+}
+
+int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
+    size_t len)
+{
+    struct fat_fs* fs = file->fs;
+    uint32_t cluster_size = fs->bpb.cluster_sectors * 512;
+    uint8_t* p = buf;
+    size_t n = len;
+    int ret;
+    uint32_t file_cluster = 0;
+    uint32_t disk_cluster;
+#if 0
+    uint32_t count;
+    uint32_t offset_in_cluster;
+
+    offset_in_cluster = offset & (cluster_size - 1);
+    if (offset_in_cluster) {
+        count = cluster_size - offset_in_cluster;
+        ret = read_cluster_part(fs, p, file->cluster, offset_in_cluster,
+            count);
+        if (ret < 0) {
+            return ret;
+        }
+        p += count;
+        n -= count;
+    }
+#endif
+
+    while (n >= cluster_size) {
+        disk_cluster = file_get_cluster(file, file_cluster++);
+        ret = read_cluster(fs, p, disk_cluster);
+        if (ret < 0) {
+            return ret;
+        }
+        p += cluster_size;
+        n -= cluster_size;
+    }
+
+    if (n) {
+        disk_cluster = file_get_cluster(file, file_cluster);
+        ret = read_cluster_part(fs, p, disk_cluster, 0, n);
+        if (ret < 0) {
+            return ret;
+        }
+    }
+
+    return 0;
 }
 
 int fat_file_close(struct fat_file* file)
 {
+    free(file->blocklist);
     return 0;
 }

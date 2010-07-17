@@ -236,8 +236,9 @@ int fat_dir_close(struct fat_dir* dir);
 
 struct fat_file {
     struct fat_fs* fs;
-    int cluster;
     uint32_t size;
+    size_t blocklist_size;
+    uint32_t* blocklist;
 };
 
 int fat_file_open(struct fat_fs* fs, const char* path, struct fat_file* file);

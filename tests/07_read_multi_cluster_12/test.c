@@ -1,0 +1,61 @@
+#include <string.h>
+#include <stdio.h>
+#include <test.h>
+
+#include "fat.h"
+
+#undef DEBUG
+
+/**
+ * Test: read_multi_cluster_12
+ * Autor: Kevin Wolf
+ * Zweck: Datei in mehreren Clustern von Platte laden
+ */
+int run_test(struct fat_fs* fs)
+{
+    int ret;
+    struct fat_file file;
+    char buf[13000];
+    int i;
+
+    if (!fat_fs_mount(fs)) {
+        test_error("Konnte das Dateisystem nicht mounten");
+    }
+
+
+    ret = fat_file_open(fs, "/test.txt", &file);
+    if (ret < 0) {
+        test_error("Konnte Datei /test.txt nicht oeffnen");
+    }
+
+    ret = fat_file_read(&file, buf, 0, 13000);
+    if (ret < 0) {
+        test_error("Konnt nicht aus Datei lesen (%d)", ret);
+    }
+
+    for (i = 0; i < 1000; i++) {
+        char* p = &buf[i * 13];
+#ifdef DEBUG
+        int j;
+        fprintf(stderr, "%5d / %5x:  ", i, i * 13);
+        for (j = 0; j < 13; j++)
+            fprintf(stderr, "%02x ", p[j]);
+        fprintf(stderr, "  | ");
+        for (j = 0; j < 13; j++)
+            fprintf(stderr, "%c", p[j] >= 32 ? p[j] : '.');
+        fprintf(stderr, "\n");
+#endif
+
+
+        if (strncmp(p, "Hallo heimur\n", 13)) {
+            p[13] = '\0';
+            test_error("Gelesen: '%s'", p);
+        }
+    }
+
+    if (fat_file_close(&file) < 0) {
+        test_error("Konnte Datei nicht schliessen");
+    }
+
+    return 0;
+}
