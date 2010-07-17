@@ -28,9 +28,10 @@ int run_test(struct fat_fs* fs)
         test_error("Konnte Datei /test.txt nicht oeffnen");
     }
 
+    /* Einmal die ganze Datei von vorne einlesen */
     ret = fat_file_read(&file, buf, 0, 13000);
     if (ret < 0) {
-        test_error("Konnt nicht aus Datei lesen (%d)", ret);
+        test_error("[1] Konnte nicht aus Datei lesen (%d)", ret);
     }
 
     for (i = 0; i < 1000; i++) {
@@ -53,6 +54,18 @@ int run_test(struct fat_fs* fs)
         }
     }
 
+    /* Einmal ein Stueckchen aus der Mitte lesen */
+    memcpy(buf, "xxxxxxxxxx", 10);
+    ret = fat_file_read(&file, buf, 6, 6);
+    if (ret < 0) {
+        test_error("[2] Konnte nicht aus Datei lesen (%d)", ret);
+    }
+    if (strncmp(buf, "heimurxxxx", 10)) {
+        buf[10] = '\0';
+        test_error("Aus der Mitte gelesen: '%s'", buf);
+    }
+
+    /* Aufraeumen */
     if (fat_file_close(&file) < 0) {
         test_error("Konnte Datei nicht schliessen");
     }

@@ -7,6 +7,8 @@
     (((x) + (cluster_size) - 1) / (cluster_size))
 #define SECTOR_BITS (512 * 8)
 
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+
 // FIXME Sektorgroesse != 512
 
 static uint8_t* get_fat_buffer(struct fat_fs* fs, uint32_t sector)
@@ -180,22 +182,19 @@ int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
     int ret;
     uint32_t file_cluster = 0;
     uint32_t disk_cluster;
-#if 0
-    uint32_t count;
     uint32_t offset_in_cluster;
 
     offset_in_cluster = offset & (cluster_size - 1);
     if (offset_in_cluster) {
-        count = cluster_size - offset_in_cluster;
-        ret = read_cluster_part(fs, p, file->cluster, offset_in_cluster,
-            count);
+        uint32_t count = MIN(n, cluster_size - offset_in_cluster);
+        disk_cluster = file_get_cluster(file, file_cluster++);
+        ret = read_cluster_part(fs, p, disk_cluster, offset_in_cluster, count);
         if (ret < 0) {
             return ret;
         }
         p += count;
         n -= count;
     }
-#endif
 
     while (n >= cluster_size) {
         disk_cluster = file_get_cluster(file, file_cluster++);
