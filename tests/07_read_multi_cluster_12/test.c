@@ -54,9 +54,20 @@ int run_test(struct fat_fs* fs)
         }
     }
 
-    /* Einmal ein Stueckchen aus der Mitte lesen */
+    /* Einmal ein Stueckchen aus der Mitte des ersten Clusters lesen */
     memcpy(buf, "xxxxxxxxxx", 10);
     ret = fat_file_read(&file, buf, 6, 6);
+    if (ret < 0) {
+        test_error("[2] Konnte nicht aus Datei lesen (%d)", ret);
+    }
+    if (strncmp(buf, "heimurxxxx", 10)) {
+        buf[10] = '\0';
+        test_error("Aus der Mitte des ersten Clusters gelesen: '%s'", buf);
+    }
+
+    /* Einmal ein Stueckchen aus der Mitte eines spaeteren Clusters lesen */
+    memcpy(buf, "xxxxxxxxxx", 10);
+    ret = fat_file_read(&file, buf, 6 + 1300, 6);
     if (ret < 0) {
         test_error("[2] Konnte nicht aus Datei lesen (%d)", ret);
     }

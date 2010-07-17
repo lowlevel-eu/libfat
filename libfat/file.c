@@ -180,7 +180,7 @@ int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
     uint8_t* p = buf;
     size_t n = len;
     int ret;
-    uint32_t file_cluster = 0;
+    uint32_t file_cluster = offset / cluster_size;
     uint32_t disk_cluster;
     uint32_t offset_in_cluster;
 
