@@ -9,9 +9,31 @@
 
 // FIXME Sektorgroesse != 512
 
+static uint8_t* get_fat_buffer(struct fat_fs* fs, uint32_t sector)
+{
+    static uint8_t buf[1024];
+    static struct fat_fs* old_fs = NULL;
+    static uint32_t old_sector = 0;
+
+    if (fs == old_fs && sector == old_sector) {
+        return buf;
+    }
+
+    /* TODO Evtl. reicht memcpy und lesen nur eines Sektors */
+    if (!fs->dev_read(sector * 512, 1024, buf, fs->dev_private)) {
+        old_fs = NULL;
+        return NULL;
+    }
+
+    old_fs = fs;
+    old_sector = sector;
+
+    return buf;
+}
+
 static uint32_t get_next_cluster(struct fat_fs* fs, uint32_t cluster)
 {
-    uint8_t buf[1024];
+    uint8_t* buf;
     uint32_t fat_bit_offset = (cluster * 12ULL);
     uint32_t fat_sector = fat_bit_offset / SECTOR_BITS;
     uint16_t value;
@@ -19,7 +41,8 @@ static uint32_t get_next_cluster(struct fat_fs* fs, uint32_t cluster)
     fat_sector += fs->bpb.reserved_sectors;
     fat_bit_offset %= SECTOR_BITS;
 
-    if (!fs->dev_read(fat_sector * 512, 1024, buf, fs->dev_private)) {
+    buf = get_fat_buffer(fs, fat_sector);
+    if (buf == NULL) {
         return 0;
     }
 
