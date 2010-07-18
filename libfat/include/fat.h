@@ -5,12 +5,18 @@
 #include <stdlib.h>
 
 #ifdef CDI_HAS_ERRNO
+
 #include <errno.h>
-#define FAT_ENOENT ENOENT
-#define FAT_EIO EIO
+#define FAT_ENOENT  ENOENT
+#define FAT_EIO     EIO
+#define FAT_EINVAL  EINVAL
+
 #else
-#define FAT_ENOENT 1
-#define FAT_EIO 2
+
+#define FAT_ENOENT  1
+#define FAT_EIO     2
+#define FAT_EINVAL  3
+
 #endif
 
 // TODO Nur fuer Debugging - spaeter entfernen
@@ -223,6 +229,8 @@ struct fat_dir_entry {
     uint32_t size;
 };
 
+struct fat_file;
+
 struct fat_dir {
     struct fat_fs* fs;
     struct fat_disk_dir_entry* entries;
@@ -242,6 +250,8 @@ struct fat_file {
 };
 
 int fat_file_open(struct fat_fs* fs, const char* path, struct fat_file* file);
+int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
+    struct fat_file* file);
 int32_t fat_file_read(struct fat_file* file, void *buf, uint32_t offset,
     size_t len);
 int fat_file_close(struct fat_file* file);

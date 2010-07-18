@@ -4,7 +4,7 @@
 #include <ctype.h>
 #include "fat.h"
 
-int fat_dir_open(struct fat_fs* fs, const char* path, struct fat_dir* dir)
+static int fat_rootdir_open(struct fat_fs* fs, struct fat_dir* dir)
 {
     int64_t rootdir_offset = fs->bpb.reserved_sectors +
         (fs->bpb.num_fats * fs->bpb.fat_sectors);
@@ -35,6 +35,91 @@ fail:
     return -1;
 }
 
+int fat_subdir_open(struct fat_fs* fs, struct fat_dir* dir, const char* path,
+    struct fat_dir* subdir)
+{
+    struct fat_dir_entry dentry;
+    struct fat_file file;
+    void* buf;
+    size_t num_entries;
+    int ret;
+
+    /* Vaterverzeichnis nach Unterverzeichnis durchsuchen */
+    do {
+        ret = fat_dir_read(dir, &dentry);
+        if (ret < 0) {
+            return ret;
+        }
+
+        if ((ret >= 0) && !strcmp(dentry.name, path)) {
+            goto found;
+        }
+    } while (ret >= 0);
+
+    return -FAT_ENOENT;
+
+    /* Verzeichnis als Datei oeffnen und Eintraege laden */
+found:
+    num_entries = 6; // FIXME
+    dentry.size = num_entries * sizeof(struct fat_disk_dir_entry);
+    ret = fat_file_open_by_dir_entry(fs, &dentry, &file);
+    if (ret < 0) {
+        return ret;
+    }
+
+    buf = malloc(dentry.size);
+
+    ret = fat_file_read(&file, buf, 0, dentry.size);
+    fat_file_close(&file);
+    if (ret < 0) {
+        free(buf);
+        return ret;
+    }
+
+    /* Rueckgabestruktur befuellen */
+    subdir->entries = buf;
+    subdir->fs = fs;
+    subdir->i = 0;
+    subdir->num = num_entries;
+
+    return 0;
+}
+
+int fat_dir_open(struct fat_fs* fs, const char* _path, struct fat_dir* dir)
+{
+    int ret;
+    char* path = strdup(_path);
+    char* p;
+    struct fat_dir subdir;
+
+    ret = fat_rootdir_open(fs, dir);
+    if (ret < 0) {
+        goto out;
+    }
+
+    /* Pfade muessen mit einem Slash anfangen */
+    if (*path != '/') {
+        ret = -FAT_EINVAL;
+        goto out;
+    }
+
+    /* Jetzt die Unterverzeichnisse parsen */
+    p = strtok(path + 1, "/");
+    while (p != NULL) {
+        ret = fat_subdir_open(fs, dir, p, &subdir);
+        fat_dir_close(dir);
+        if (ret < 0) {
+            goto out;
+        }
+        *dir = subdir;
+        p = strtok(NULL, "/");
+    }
+
+    ret = 0;
+out:
+    free(path);
+    return ret;
+}
 
 static void short_fn_to_string(struct fat_disk_dir_entry* entry, char* buf)
 {
@@ -58,12 +143,12 @@ static void short_fn_to_string(struct fat_disk_dir_entry* entry, char* buf)
     for (i = 0; i < 3; i++) {
         buf[ext_start + i] = tolower(entry->ext[i]);
         if (!isspace(buf[ext_start + i])) {
-            pos = ext_start + i;
+            pos = ext_start + i + 1;
         }
     }
 
     // Nullterminieren
-    buf[++pos] = '\0';
+    buf[pos] = '\0';
 }
 
 static int is_valid_entry(struct fat_disk_dir_entry* entry)
@@ -73,8 +158,18 @@ static int is_valid_entry(struct fat_disk_dir_entry* entry)
         return 0;
     }
 
+    // Die Datei ist geloescht
+    if (entry->name[0] == (char) 0xE5) {
+        return 0;
+    }
+
     // Die Datentraegerbezeichnung interessiert uns nicht
     if (entry->attrib & FAT_ATTRIB_VOLUME) {
+        return 0;
+    }
+
+    // . und .. werden ignoriert
+    if (entry->name[0] == '.') {
         return 0;
     }
 

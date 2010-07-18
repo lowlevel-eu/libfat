@@ -85,7 +85,7 @@ int run_test(struct fat_fs* _fs)
         test_error("Erwartete Datei fehlt: test.txt\n");
     }
 
-    if (!dir_has_entry("/", "test.")) {
+    if (!dir_has_entry("/", "test")) {
         test_error("Erwartete Datei fehlt: test.\n");
     }
 
