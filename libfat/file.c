@@ -33,12 +33,12 @@ static uint8_t* get_fat_buffer(struct fat_fs* fs, uint32_t sector)
     return buf;
 }
 
-static uint32_t get_next_cluster(struct fat_fs* fs, uint32_t cluster)
+static uint32_t get_next_cluster_fat12(struct fat_fs* fs, uint32_t cluster)
 {
     uint8_t* buf;
     uint32_t fat_bit_offset = (cluster * 12ULL);
     uint32_t fat_sector = fat_bit_offset / SECTOR_BITS;
-    uint16_t value;
+    uint32_t value;
 
     fat_sector += fs->bpb.reserved_sectors;
     fat_bit_offset %= SECTOR_BITS;
@@ -55,6 +55,33 @@ static uint32_t get_next_cluster(struct fat_fs* fs, uint32_t cluster)
         value >>= 4;
     }
 
+    if (value > 0xff5) {
+        value |= 0xfffff000;
+    }
+
+    return value;
+}
+
+static uint32_t get_next_cluster_fat16(struct fat_fs* fs, uint32_t cluster)
+{
+    uint8_t* buf;
+    uint32_t fat_sector = (cluster * sizeof(uint16_t)) / 512;
+    uint32_t fat_offset = (cluster * sizeof(uint16_t)) % 512;
+    uint32_t value;
+
+    fat_sector += fs->bpb.reserved_sectors;
+
+    buf = get_fat_buffer(fs, fat_sector);
+    if (buf == NULL) {
+        return 0;
+    }
+
+    value = *((uint16_t*) &buf[fat_offset]);
+
+    if (value > 0xfff5) {
+        value |= 0xffff0000;
+    }
+
     return value;
 }
 
@@ -65,6 +92,22 @@ int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
     uint32_t cluster;
     uint32_t i;
 
+    /* Passende Clusterlesefunktion aussuchen */
+    uint32_t (*get_next_cluster)(struct fat_fs*, uint32_t);
+    switch (fs->type) {
+        case FS_TYPE_FAT12:
+            get_next_cluster = get_next_cluster_fat12;
+            break;
+
+        case FS_TYPE_FAT16:
+            get_next_cluster = get_next_cluster_fat16;
+            break;
+
+        default:
+            return -FAT_EINVAL;
+    }
+
+    /* Dateistruktur anlegen */
     file->fs = fs;
     file->size = entry->size;
 
@@ -90,7 +133,7 @@ int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
         /* Fehler und Dateiende */
         if (cluster == 0) {
             goto fail;
-        } else if (cluster == 0xfff) {
+        } else if (cluster == 0xffffffff) {
             break;
         }
 
@@ -167,9 +210,9 @@ static uint32_t file_get_cluster(struct fat_file* file, uint32_t file_cluster)
 
 static int64_t get_data_cluster_offset(struct fat_fs* fs, uint32_t cluster_idx)
 {
-    uint32_t cluster = fs->first_data_cluster + (cluster_idx - 2);
+    uint32_t sector = fs->bpb.cluster_sectors * (cluster_idx - 2);
 
-    return (cluster * fs->bpb.cluster_sectors) * 512;
+    return (fs->first_data_cluster + sector) * 512;
 }
 
 static int read_cluster(struct fat_fs* fs, void* buf, uint32_t cluster_idx)
