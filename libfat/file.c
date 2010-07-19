@@ -62,22 +62,54 @@ int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
     struct fat_file* file)
 {
     uint32_t cluster_size = fs->bpb.cluster_sectors * 512;
+    uint32_t cluster;
     uint32_t i;
 
     file->fs = fs;
     file->size = entry->size;
 
-    /* Blockliste anlegen und einlesen */
-    file->blocklist_size = NUM_CLUSTERS(file->size, cluster_size);
+    /*
+     * Blockliste anlegen und einlesen. Bei Groesse 0 (z.B. Verzeichnisse gehen
+     * wir von unbekannter Dateigroesse aus und lassen die Blockliste dynamisch
+     * wachsen.
+     */
+    if (file->size > 0) {
+        file->blocklist_size = NUM_CLUSTERS(file->size, cluster_size);
+    } else {
+        file->blocklist_size = 1;
+    }
+
     file->blocklist = malloc(file->blocklist_size * sizeof(uint32_t));
-
     file->blocklist[0] = entry->first_cluster;
-    for (i = 1; i < file->blocklist_size; i++) {
-        file->blocklist[i] = get_next_cluster(fs, file->blocklist[i - 1]);
 
-        if (file->blocklist[i] == 0) {
+    cluster = 0;
+    i = 1;
+    while (1) {
+        cluster = get_next_cluster(fs, file->blocklist[i - 1]);
+
+        /* Fehler und Dateiende */
+        if (cluster == 0) {
             goto fail;
+        } else if (cluster == 0xfff) {
+            break;
         }
+
+        /* Blocklist vergroessern, falls noetig */
+        if (file->blocklist_size <= i) {
+            file->blocklist_size *= 2;
+            file->blocklist = realloc(file->blocklist,
+                file->blocklist_size * sizeof(uint32_t));
+        }
+
+        /* In die Blockliste eintragen */
+        file->blocklist[i] = cluster;
+
+        i++;
+    }
+
+    /* Dateigroesse anpassen, wenn sie unbekannt war */
+    if (file->size == 0) {
+        file->size = i * cluster_size;
     }
 
     return 0;

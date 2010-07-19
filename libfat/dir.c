@@ -41,7 +41,6 @@ int fat_subdir_open(struct fat_fs* fs, struct fat_dir* dir, const char* path,
     struct fat_dir_entry dentry;
     struct fat_file file;
     void* buf;
-    size_t num_entries;
     int ret;
 
     /* Vaterverzeichnis nach Unterverzeichnis durchsuchen */
@@ -60,16 +59,14 @@ int fat_subdir_open(struct fat_fs* fs, struct fat_dir* dir, const char* path,
 
     /* Verzeichnis als Datei oeffnen und Eintraege laden */
 found:
-    num_entries = 6; // FIXME
-    dentry.size = num_entries * sizeof(struct fat_disk_dir_entry);
     ret = fat_file_open_by_dir_entry(fs, &dentry, &file);
     if (ret < 0) {
         return ret;
     }
 
-    buf = malloc(dentry.size);
+    buf = malloc(file.size);
 
-    ret = fat_file_read(&file, buf, 0, dentry.size);
+    ret = fat_file_read(&file, buf, 0, file.size);
     fat_file_close(&file);
     if (ret < 0) {
         free(buf);
@@ -80,7 +77,7 @@ found:
     subdir->entries = buf;
     subdir->fs = fs;
     subdir->i = 0;
-    subdir->num = num_entries;
+    subdir->num = file.size / sizeof(struct fat_disk_dir_entry);
 
     return 0;
 }
