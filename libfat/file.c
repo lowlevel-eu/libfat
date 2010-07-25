@@ -194,15 +194,28 @@ int fat_file_open(struct fat_fs* fs, const char* path, struct fat_file* file)
     struct fat_dir dir;
     struct fat_dir_entry dentry;
     int ret;
+    char* p;
+
+    /* Letzten Pfadtrenner suchen */
+    p = strrchr(path, '/');
+    if (p == NULL) {
+        return -FAT_EINVAL;
+    }
 
     /* Verzeichnis oeffnen */
-    ret = fat_dir_open(fs, "/", &dir);
+    int len = p - path + 1;
+    char dirname[len + 1];
+
+    memcpy(dirname, path, len);
+    dirname[len] = '\0';
+
+    ret = fat_dir_open(fs, dirname, &dir);
     if (ret< 0) {
         return ret;
     }
 
-    /*Einleitenden / entfernen */
-    path++;
+    /* Alles vor dem Dateinamen wegwerfen */
+    path = p + 1;
 
     /* Verzeichnis nach Dateinamen durchsuchen */
     do {
