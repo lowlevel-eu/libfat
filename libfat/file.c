@@ -85,6 +85,29 @@ static uint32_t get_next_cluster_fat16(struct fat_fs* fs, uint32_t cluster)
     return value;
 }
 
+static uint32_t get_next_cluster_fat32(struct fat_fs* fs, uint32_t cluster)
+{
+    uint8_t* buf;
+    uint32_t fat_sector = (cluster * sizeof(uint32_t)) / 512;
+    uint32_t fat_offset = (cluster * sizeof(uint32_t)) % 512;
+    uint32_t value;
+
+    fat_sector += fs->bpb.reserved_sectors;
+
+    buf = get_fat_buffer(fs, fat_sector);
+    if (buf == NULL) {
+        return 0;
+    }
+
+    value = *((uint32_t*) &buf[fat_offset]);
+
+    if (value > 0xffffff5) {
+        value |= 0xf0000000;
+    }
+
+    return value;
+}
+
 int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
     struct fat_file* file)
 {
@@ -101,6 +124,10 @@ int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
 
         case FS_TYPE_FAT16:
             get_next_cluster = get_next_cluster_fat16;
+            break;
+
+        case FS_TYPE_FAT32:
+            get_next_cluster = get_next_cluster_fat32;
             break;
 
         default:
@@ -133,7 +160,7 @@ int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
         /* Fehler und Dateiende */
         if (cluster == 0) {
             goto fail;
-        } else if (cluster == 0xffffffff) {
+        } else if (cluster >= 0xfffffff8) {
             break;
         }
 
@@ -185,15 +212,15 @@ int fat_file_open(struct fat_fs* fs, const char* path, struct fat_file* file)
         }
     } while (ret >= 0);
 
+    /* Datei oeffnen oder -ENOENT zurueckgeben, wenn sie nicht existiert */
+    if (ret < 0) {
+        return -FAT_ENOENT;
+    }
+
     /* Verzeichnis wieder schliessen */
     ret = fat_dir_close(&dir);
     if (ret < 0) {
         return ret;
-    }
-
-    /* Datei oeffnen oder -ENOENT zurueckgeben, wenn sie nicht existiert */
-    if (ret < 0) {
-        return -FAT_ENOENT;
     }
 
     return fat_file_open_by_dir_entry(fs, &dentry, file);

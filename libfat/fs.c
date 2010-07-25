@@ -35,6 +35,7 @@ int fat_fs_mount(struct fat_fs* fs)
         (fs->bpb.rootdir_length * sizeof(struct fat_disk_dir_entry) + 511)
         / 512;
 
+    // TODO fat_sectors ungueltig fuer FAT32
     data_sectors = total_sectors
         - fs->bpb.reserved_sectors
         - (fs->bpb.num_fats * fs->bpb.fat_sectors)
@@ -46,6 +47,8 @@ int fat_fs_mount(struct fat_fs* fs)
         fs->type = FS_TYPE_FAT16;
     } else {
         fs->type = FS_TYPE_FAT32;
+        data_sectors -=
+            (fs->bpb.num_fats * fs->bpb.extended.fat32.fat_sectors);
     }
 
 

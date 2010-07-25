@@ -22,6 +22,13 @@
 // TODO Nur fuer Debugging - spaeter entfernen
 #include <stdio.h>
 
+struct fat32_extended_bpb {
+    uint32_t    fat_sectors;
+    uint16_t    flags;
+    uint16_t    version;
+    uint32_t    rootdir_cluster;
+} __attribute__((packed));
+
 /**
  * BIOS Parameter Block
  */
@@ -35,12 +42,18 @@ struct fat_bpb {
     uint16_t    rootdir_length;
     uint16_t    total_sectors;
     uint8_t     media_type;
+
+    /* Nur fuer FAT12/16; FAT32 benutzt fat32_extended_bpb.fat_sectors */
     uint16_t    fat_sectors;
+
     uint16_t    sectors_per_track;
     uint16_t    heads;
     uint32_t    hidden_sectors;
     uint32_t    total_sectors_large;
-    uint8_t     bootloader[474];
+    union {
+        struct fat32_extended_bpb   fat32;
+        uint8_t                     bytes[474];
+    } extended;
     uint16_t    magic;
 } __attribute__((packed));
 

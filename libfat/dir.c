@@ -35,6 +35,40 @@ fail:
     return -1;
 }
 
+static int fat_rootdir32_open(struct fat_fs* fs, struct fat_dir* dir)
+{
+    struct fat_file file;
+    struct fat32_extended_bpb* ext = &fs->bpb.extended.fat32;
+    struct fat_dir_entry dentry = {
+        .size = 0,
+        .first_cluster = ext->rootdir_cluster,
+    };
+    int ret;
+    void* buf;
+
+    ret = fat_file_open_by_dir_entry(fs, &dentry, &file);
+    if (ret < 0) {
+        return ret;
+    }
+
+    buf = malloc(file.size);
+
+    ret = fat_file_read(&file, buf, 0, file.size);
+    fat_file_close(&file);
+    if (ret < 0) {
+        free(buf);
+        return ret;
+    }
+
+    /* Rueckgabestruktur befuellen */
+    dir->entries = buf;
+    dir->fs = fs;
+    dir->i = 0;
+    dir->num = file.size / sizeof(struct fat_disk_dir_entry);
+
+    return 0;
+}
+
 int fat_subdir_open(struct fat_fs* fs, struct fat_dir* dir, const char* path,
     struct fat_dir* subdir)
 {
@@ -89,7 +123,12 @@ int fat_dir_open(struct fat_fs* fs, const char* _path, struct fat_dir* dir)
     char* p;
     struct fat_dir subdir;
 
-    ret = fat_rootdir_open(fs, dir);
+    if (fs->type == FS_TYPE_FAT32) {
+        ret = fat_rootdir32_open(fs, dir);
+    } else {
+        ret = fat_rootdir_open(fs, dir);
+    }
+
     if (ret < 0) {
         goto out;
     }
