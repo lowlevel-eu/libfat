@@ -23,6 +23,7 @@ int fat_fs_mount(struct fat_fs* fs)
     uint32_t total_sectors;
     uint32_t rootdir_sectors;
     uint32_t data_sectors;
+    uint32_t data_clusters;
 
     if (fs->bpb.total_sectors != 0) {
         total_sectors = fs->bpb.total_sectors;
@@ -40,10 +41,11 @@ int fat_fs_mount(struct fat_fs* fs)
         - fs->bpb.reserved_sectors
         - (fs->bpb.num_fats * fs->bpb.fat_sectors)
         - rootdir_sectors;
+    data_clusters = data_sectors / fs->bpb.cluster_sectors;
 
-    if (data_sectors < 4085) {
+    if (data_clusters < 4085) {
         fs->type = FS_TYPE_FAT12;
-    } else if (data_sectors < 65525) {
+    } else if (data_clusters < 65525) {
         fs->type = FS_TYPE_FAT16;
     } else {
         fs->type = FS_TYPE_FAT32;
