@@ -239,6 +239,7 @@ struct fat_disk_dir_entry {
 struct fat_dir_entry {
     char name[13]; /* 8.3 plus \0 */
     int first_cluster;
+    int attrib;
     uint32_t size;
 };
 

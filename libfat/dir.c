@@ -232,6 +232,7 @@ int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry)
 
     entry->first_cluster = dir->entries[dir->i].first_cluster;
     entry->size = dir->entries[dir->i].size;
+    entry->attrib = dir->entries[dir->i].attrib;
 
     dir->i++;
     return 0;
