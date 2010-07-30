@@ -321,8 +321,8 @@ static int write_cluster_part(struct fat_fs* fs, void* buf,
     return 0;
 }
 
-int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
-    size_t len)
+int32_t fat_file_rw(struct fat_file* file, void* buf, uint32_t offset,
+    size_t len, int is_write)
 {
     struct fat_fs* fs = file->fs;
     uint32_t cluster_size = fs->bpb.cluster_sectors * 512;
@@ -333,9 +333,17 @@ int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
     uint32_t disk_cluster;
     uint32_t offset_in_cluster;
 
-    /* Bei Ueberlaenge Fehler zurueckgeben */
-    if (offset + len > file->size) {
-        return -FAT_EIO;
+    /* Funktionspointer fuer Lesen/Schreiben von Clustern */
+    int (*rw_cluster)(struct fat_fs* fs, void* buf, uint32_t cluster_idx);
+    int (*rw_cluster_part)(struct fat_fs* fs, void* buf, uint32_t cluster_idx,
+        size_t offset, size_t len);
+
+    if (is_write) {
+        rw_cluster      = write_cluster;
+        rw_cluster_part = write_cluster_part;
+    } else {
+        rw_cluster      = read_cluster;
+        rw_cluster_part = read_cluster_part;
     }
 
     /* Angefangener Cluster am Anfang */
@@ -348,7 +356,7 @@ int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
             return -FAT_EIO;
         }
 
-        ret = read_cluster_part(fs, p, disk_cluster, offset_in_cluster, count);
+        ret = rw_cluster_part(fs, p, disk_cluster, offset_in_cluster, count);
         if (ret < 0) {
             return ret;
         }
@@ -364,7 +372,7 @@ int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
             return -FAT_EIO;
         }
 
-        ret = read_cluster(fs, p, disk_cluster);
+        ret = rw_cluster(fs, p, disk_cluster);
         if (ret < 0) {
             return ret;
         }
@@ -380,7 +388,7 @@ int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
             return -FAT_EIO;
         }
 
-        ret = read_cluster_part(fs, p, disk_cluster, 0, n);
+        ret = rw_cluster_part(fs, p, disk_cluster, 0, n);
         if (ret < 0) {
             return ret;
         }
@@ -389,72 +397,27 @@ int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
     return 0;
 }
 
+int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
+    size_t len)
+{
+
+    /* Bei Ueberlaenge Fehler zurueckgeben */
+    if (offset + len > file->size) {
+        return -FAT_EIO;
+    }
+
+    return fat_file_rw(file, buf, offset, len, 0);
+}
+
 int32_t fat_file_write(struct fat_file* file, void *buf, uint32_t offset,
     size_t len)
 {
-    struct fat_fs* fs = file->fs;
-    uint32_t cluster_size = fs->bpb.cluster_sectors * 512;
-    uint8_t* p = buf;
-    size_t n = len;
-    int ret;
-    uint32_t file_cluster = offset / cluster_size;
-    uint32_t disk_cluster;
-    uint32_t offset_in_cluster;
-
     /* TODO Datei erweitern */
     if (offset + len > file->size) {
         return -FAT_EIO;
     }
 
-    /* Angefangener Cluster am Anfang */
-    offset_in_cluster = offset & (cluster_size - 1);
-    if (offset_in_cluster) {
-        uint32_t count = MIN(n, cluster_size - offset_in_cluster);
-
-        disk_cluster = file_get_cluster(file, file_cluster++);
-        if (disk_cluster == 0) {
-            return -FAT_EIO;
-        }
-
-        ret = write_cluster_part(fs, p, disk_cluster, offset_in_cluster, count);
-        if (ret < 0) {
-            return ret;
-        }
-
-        p += count;
-        n -= count;
-    }
-
-    /* Eine beliebige Anzahl von ganzen Clustern in der Mitte */
-    while (n >= cluster_size) {
-        disk_cluster = file_get_cluster(file, file_cluster++);
-        if (disk_cluster == 0) {
-            return -FAT_EIO;
-        }
-
-        ret = write_cluster(fs, p, disk_cluster);
-        if (ret < 0) {
-            return ret;
-        }
-
-        p += cluster_size;
-        n -= cluster_size;
-    }
-
-    /* Und wieder ein angefangener Cluster am Ende */
-    if (n) {
-        disk_cluster = file_get_cluster(file, file_cluster);
-        if (disk_cluster == 0) {
-            return -FAT_EIO;
-        }
-
-        ret = write_cluster_part(fs, p, disk_cluster, 0, n);
-        if (ret < 0) {
-            return ret;
-        }
-    }
-
-    return 0;
+    return fat_file_rw(file, buf, offset, len, 1);
 }
 
 int fat_file_close(struct fat_file* file)

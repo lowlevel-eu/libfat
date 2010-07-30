@@ -13,7 +13,8 @@ int run_test(struct fat_fs* fs)
 {
     int ret;
     struct fat_file file;
-    char buf[130];
+    char buf[13000];
+    int i;
 
     if (!fat_fs_mount(fs)) {
         test_error("Konnte das Dateisystem nicht mounten");
@@ -46,9 +47,55 @@ int run_test(struct fat_fs* fs)
     buf[4 * 13] = '\0';
 
     if (strncmp(buf, "Hallo heimur\n[Hallo Welt]\n[Hallo Welt]\n"
-        "Hallo heimur\n", 13))
+        "Hallo heimur\n", 4 * 13))
     {
         test_error("Gelesen: '%s'", buf);
+    }
+
+    /* Etwas grossflaechiger ueberschreiben */
+    for (i = 100; i < 800; i++) {
+        char* p = &buf[i * 13];
+        memcpy(p, "Hello World!\n", 13);
+    }
+
+    ret = fat_file_write(&file, buf + 13 * 100, 13 * 100, 13 * 700);
+    if (ret < 0) {
+        test_error("Konnte nicht schreiben (%d)", ret);
+    }
+
+    /* Einmal die ganze Datei von vorne einlesen */
+    memset(buf, 0xa5, 13000);
+    ret = fat_file_read(&file, buf, 0, 13000);
+    if (ret < 0) {
+        test_error("Konnte nicht aus Datei lesen (%d)", ret);
+    }
+
+    for (i = 0; i < 1000; i++) {
+        char* p = &buf[i * 13];
+        const char* s;
+
+#ifdef DEBUG
+        int j;
+        fprintf(stderr, "%5d / %5x:  ", i, i * 13);
+        for (j = 0; j < 13; j++)
+            fprintf(stderr, "%02x ", p[j]);
+        fprintf(stderr, "  | ");
+        for (j = 0; j < 13; j++)
+            fprintf(stderr, "%c", p[j] >= 32 ? p[j] : '.');
+        fprintf(stderr, "\n");
+#endif
+
+
+        if (i >= 100 && i < 800) {
+            s = "Hello World!\n";
+        } else {
+            s = "Hallo heimur\n";
+        }
+
+        if (strncmp(p, s, 13)) {
+            p[13] = '\0';
+            test_error("[%d] Gelesen: '%s', erwartet '%s'", i, p, s);
+        }
     }
 
     if (fat_file_close(&file) < 0) {
