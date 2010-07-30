@@ -268,6 +268,8 @@ int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
     struct fat_file* file);
 int32_t fat_file_read(struct fat_file* file, void *buf, uint32_t offset,
     size_t len);
+int32_t fat_file_write(struct fat_file* file, void *buf, uint32_t offset,
+    size_t len);
 int fat_file_close(struct fat_file* file);
 
 #endif

@@ -84,21 +84,9 @@ void test_fsck()
     system(cmdline);
     free(cmdline);
 
-    asprintf(&cmdline, "/sbin/e2fsck -fy tmp.img > /dev/null 2>&1");
+    asprintf(&cmdline, "/sbin/fsck.msdos -y tmp.img > /dev/null 2>&1");
     if (system(cmdline)) {
         test_error("fsck hat einen Fehler gemeldet");
-    }
-    free(cmdline);
-}
-
-void test_etool()
-{
-    char* cmdline;
-    fsync(image_fd);
-
-    asprintf(&cmdline, "etool/etool %s check > /dev/null 2>&1", image_name);
-    if (system(cmdline)) {
-        test_error("etool check hat einen Fehler gemeldet");
     }
     free(cmdline);
 }
