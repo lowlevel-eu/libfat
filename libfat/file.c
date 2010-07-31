@@ -108,6 +108,78 @@ static uint32_t get_next_cluster_fat32(struct fat_fs* fs, uint32_t cluster)
     return value;
 }
 
+static int set_next_cluster_fat16(struct fat_fs* fs, uint32_t cluster,
+    uint32_t value)
+{
+    uint8_t* buf;
+    uint32_t fat_sector = (cluster * sizeof(uint16_t)) / 512;
+    uint32_t fat_offset = (cluster * sizeof(uint16_t)) % 512;
+
+    fat_sector += fs->bpb.reserved_sectors;
+
+    buf = get_fat_buffer(fs, fat_sector);
+    if (buf == NULL) {
+        return -FAT_EIO;
+    }
+
+    *((uint16_t*) &buf[fat_offset]) = value;
+
+    return 0;
+}
+
+static int set_next_cluster(struct fat_fs* fs, uint32_t cluster,
+    uint32_t value)
+{
+    return set_next_cluster_fat16(fs, cluster, value);
+}
+
+static int fat_extend_file(struct fat_file* file, uint32_t new_size)
+{
+    struct fat_fs* fs = file->fs;
+    uint32_t cluster_size = fs->bpb.cluster_sectors * 512;
+    size_t old_blocklist_size = file->blocklist_size;
+    size_t new_blocklist_size = NUM_CLUSTERS(new_size, cluster_size);
+    int ret;
+
+    /* Wenn noetig, neue Cluster allozieren */
+    if (new_blocklist_size != old_blocklist_size) {
+        uint32_t i;
+        uint32_t num_data_clusters = NUM_CLUSTERS(
+            fs->total_sectors - fs->first_data_cluster,
+            cluster_size);
+
+        /* Blockliste vergroessern */
+        file->blocklist = realloc(file->blocklist,
+            new_blocklist_size * sizeof(uint32_t));
+        file->blocklist_size = new_blocklist_size;
+
+        /* Neue Eintraege der Blockliste befuellen */
+        for (i = old_blocklist_size; i < new_blocklist_size; i++) {
+            uint32_t j;
+
+            /* Freien Cluster suchen und einhaengen */
+            for (j = 0; j < num_data_clusters; j++) {
+                if (get_next_cluster_fat16(fs, j) == 0) {
+                    ret = set_next_cluster(fs, file->blocklist[i - 1], j);
+                    if (ret < 0) {
+                        return ret;
+                    }
+
+                    file->blocklist[i] = j;
+                }
+            }
+        }
+
+        /* Der letzte Eintrag braucht eine EOF-Markierung */
+        set_next_cluster(fs, file->blocklist[i - 1], 0xffffffff);
+    }
+
+    /* Dateigroesse aendern */
+    file->size = new_size;
+
+    return 0;
+}
+
 int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
     struct fat_file* file)
 {
@@ -412,9 +484,14 @@ int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
 int32_t fat_file_write(struct fat_file* file, void *buf, uint32_t offset,
     size_t len)
 {
-    /* TODO Datei erweitern */
+    int ret;
+
+    /* Datei erweitern, falls noetig */
     if (offset + len > file->size) {
-        return -FAT_EIO;
+        ret = fat_extend_file(file, offset + len);
+        if (ret < 0) {
+            return ret;
+        }
     }
 
     return fat_file_rw(file, buf, offset, len, 1);
