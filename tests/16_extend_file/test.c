@@ -80,6 +80,52 @@ int run_test(struct fat_fs* fs)
         test_error("Konnte Datei nicht schliessen");
     }
 
+#if 0
+    /* Und jetzt nochmal die Datei neu oeffnen und dann probieren */
+    ret = fat_file_open(fs, "/test.txt", &file);
+    if (ret < 0) {
+        test_error("Konnte Datei /test.txt nicht neu oeffnen");
+    }
+
+    memset(buf, 0xa5, 26000);
+    ret = fat_file_read(&file, buf, 0, 26000);
+    if (ret < 0) {
+        test_error("Konnte nicht aus Datei lesen (%d)", ret);
+    }
+
+    for (i = 0; i < 2000; i++) {
+        char* p = &buf[i * 13];
+        const char* s;
+
+#ifdef DEBUG
+        int j;
+        fprintf(stderr, "%5d / %5x:  ", i, i * 13);
+        for (j = 0; j < 13; j++)
+            fprintf(stderr, "%02x ", p[j]);
+        fprintf(stderr, "  | ");
+        for (j = 0; j < 13; j++)
+            fprintf(stderr, "%c", p[j] >= 32 ? p[j] : '.');
+        fprintf(stderr, "\n");
+#endif
+
+
+        if (i < 500) {
+            s = "Hallo heimur\n";
+        } else {
+            s = "Hello World!\n";
+        }
+
+        if (strncmp(p, s, 13)) {
+            p[13] = '\0';
+            test_error("[%d] Gelesen: '%s', erwartet '%s'", i, p, s);
+        }
+    }
+
+    if (fat_file_close(&file) < 0) {
+        test_error("Konnte Datei nicht schliessen");
+    }
+#endif
+
     test_fsck();
 
     return 0;

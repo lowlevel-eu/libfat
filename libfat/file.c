@@ -11,26 +11,58 @@
 
 // FIXME Sektorgroesse != 512
 
+static uint8_t fat_buf[1024];
+static struct fat_fs* fat_buf_fs = NULL;
+static uint32_t fat_buf_sector = 0;
+static int fat_buf_changed = 0;
+
 static uint8_t* get_fat_buffer(struct fat_fs* fs, uint32_t sector)
 {
-    static uint8_t buf[1024];
-    static struct fat_fs* old_fs = NULL;
-    static uint32_t old_sector = 0;
+    sector += fs->bpb.reserved_sectors;
 
-    if (fs == old_fs && sector == old_sector) {
-        return buf;
+    if (fs == fat_buf_fs && sector == fat_buf_sector) {
+        return fat_buf;
     }
 
     /* TODO Evtl. reicht memcpy und lesen nur eines Sektors */
-    if (!fs->dev_read(sector * 512, 1024, buf, fs->dev_private)) {
-        old_fs = NULL;
+    if (!fs->dev_read(sector * 512, 1024, fat_buf, fs->dev_private)) {
+        fat_buf_fs = NULL;
         return NULL;
     }
 
-    old_fs = fs;
-    old_sector = sector;
+    fat_buf_fs = fs;
+    fat_buf_sector = sector;
+    fat_buf_changed = 0;
 
-    return buf;
+    return fat_buf;
+}
+
+static int commit_fat_buffer(struct fat_fs* fs)
+{
+    int i;
+    uint32_t sector;
+
+    if (fs != fat_buf_fs) {
+        return 0;
+    }
+
+    sector = fat_buf_sector;
+    for (i = 0; i < fs->bpb.num_fats; i++) {
+        /* TODO Evtl. reicht schreiben nur eines Sektors */
+        if (!fs->dev_write(sector * 512, 1024, fat_buf, fs->dev_private)) {
+            return -FAT_EIO;
+        }
+
+        if (fs->type == FS_TYPE_FAT32) {
+            sector += fs->bpb.extended.fat32.fat_sectors;
+        } else {
+            sector += fs->bpb.fat_sectors;
+        }
+    }
+
+    fat_buf_changed = 0;
+
+    return 0;
 }
 
 static uint32_t get_next_cluster_fat12(struct fat_fs* fs, uint32_t cluster)
@@ -40,7 +72,6 @@ static uint32_t get_next_cluster_fat12(struct fat_fs* fs, uint32_t cluster)
     uint32_t fat_sector = fat_bit_offset / SECTOR_BITS;
     uint32_t value;
 
-    fat_sector += fs->bpb.reserved_sectors;
     fat_bit_offset %= SECTOR_BITS;
 
     buf = get_fat_buffer(fs, fat_sector);
@@ -69,8 +100,6 @@ static uint32_t get_next_cluster_fat16(struct fat_fs* fs, uint32_t cluster)
     uint32_t fat_offset = (cluster * sizeof(uint16_t)) % 512;
     uint32_t value;
 
-    fat_sector += fs->bpb.reserved_sectors;
-
     buf = get_fat_buffer(fs, fat_sector);
     if (buf == NULL) {
         return 0;
@@ -91,8 +120,6 @@ static uint32_t get_next_cluster_fat32(struct fat_fs* fs, uint32_t cluster)
     uint32_t fat_sector = (cluster * sizeof(uint32_t)) / 512;
     uint32_t fat_offset = (cluster * sizeof(uint32_t)) % 512;
     uint32_t value;
-
-    fat_sector += fs->bpb.reserved_sectors;
 
     buf = get_fat_buffer(fs, fat_sector);
     if (buf == NULL) {
@@ -115,14 +142,13 @@ static int set_next_cluster_fat16(struct fat_fs* fs, uint32_t cluster,
     uint32_t fat_sector = (cluster * sizeof(uint16_t)) / 512;
     uint32_t fat_offset = (cluster * sizeof(uint16_t)) % 512;
 
-    fat_sector += fs->bpb.reserved_sectors;
-
     buf = get_fat_buffer(fs, fat_sector);
     if (buf == NULL) {
         return -FAT_EIO;
     }
 
     *((uint16_t*) &buf[fat_offset]) = value;
+    fat_buf_changed = 1;
 
     return 0;
 }
@@ -172,6 +198,9 @@ static int fat_extend_file(struct fat_file* file, uint32_t new_size)
 
         /* Der letzte Eintrag braucht eine EOF-Markierung */
         set_next_cluster(fs, file->blocklist[i - 1], 0xffffffff);
+
+        /* Und zuletzt veraenderte Eintraege zurueckschreiben */
+        commit_fat_buffer(fs);
     }
 
     /* Dateigroesse aendern */
