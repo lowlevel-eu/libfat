@@ -237,6 +237,7 @@ struct fat_disk_dir_entry {
 
 
 struct fat_dir_entry {
+    int index_in_dir;
     char name[13]; /* 8.3 plus \0 */
     int first_cluster;
     int attrib;
@@ -254,6 +255,7 @@ struct fat_dir {
 
 int fat_dir_open(struct fat_fs* fs, const char* path, struct fat_dir* dir);
 int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry);
+int fat_dir_update_entry(struct fat_file* file);
 int fat_dir_close(struct fat_dir* dir);
 
 struct fat_file {
@@ -261,6 +263,7 @@ struct fat_file {
     uint32_t size;
     size_t blocklist_size;
     uint32_t* blocklist;
+    struct fat_dir_entry dir_entry;
 };
 
 int fat_file_open(struct fat_fs* fs, const char* path, struct fat_file* file);

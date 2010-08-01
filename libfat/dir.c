@@ -230,11 +230,45 @@ int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry)
 
     short_fn_to_string(&dir->entries[dir->i], entry->name);
 
+    entry->index_in_dir = dir->i;
     entry->first_cluster = dir->entries[dir->i].first_cluster;
     entry->size = dir->entries[dir->i].size;
     entry->attrib = dir->entries[dir->i].attrib;
 
     dir->i++;
+    return 0;
+}
+
+int fat_dir_update_entry(struct fat_file* file)
+{
+    struct fat_fs* fs = file->fs;
+    struct fat_disk_dir_entry dentry;
+
+#if 0
+    if (i < 0 ||i >= dir->num) {
+        return -FAT_EINVAL;
+    }
+#endif
+
+    int64_t rootdir_offset = fs->bpb.reserved_sectors +
+        (fs->bpb.num_fats * fs->bpb.fat_sectors);
+    uint32_t offset = rootdir_offset * 512 +
+        file->dir_entry.index_in_dir * sizeof(struct fat_disk_dir_entry);
+
+    if (!fs->dev_read(offset, sizeof(struct fat_disk_dir_entry), &dentry,
+        fs->dev_private))
+    {
+        return -FAT_EIO;
+    }
+
+    dentry.size = file->size;
+
+    if (!fs->dev_write(offset, sizeof(struct fat_disk_dir_entry), &dentry,
+        fs->dev_private))
+    {
+        return -FAT_EIO;
+    }
+
     return 0;
 }
 

@@ -205,6 +205,7 @@ static int fat_extend_file(struct fat_file* file, uint32_t new_size)
 
     /* Dateigroesse aendern */
     file->size = new_size;
+    fat_dir_update_entry(file);
 
     return 0;
 }
@@ -238,6 +239,7 @@ int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
     /* Dateistruktur anlegen */
     file->fs = fs;
     file->size = entry->size;
+    file->dir_entry = *entry;
 
     /*
      * Blockliste anlegen und einlesen. Bei Groesse 0 (z.B. Verzeichnisse gehen
