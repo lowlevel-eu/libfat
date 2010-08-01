@@ -16,6 +16,9 @@ static struct fat_fs* fat_buf_fs = NULL;
 static uint32_t fat_buf_sector = 0;
 static int fat_buf_changed = 0;
 
+static uint32_t get_next_cluster(struct fat_fs* fs, uint32_t cluster);
+
+
 static uint8_t* get_fat_buffer(struct fat_fs* fs, uint32_t sector)
 {
     sector += fs->bpb.reserved_sectors;
@@ -80,6 +83,7 @@ static uint32_t get_next_cluster_fat12(struct fat_fs* fs, uint32_t cluster)
     }
 
     value = *((uint16_t*) &buf[fat_bit_offset / 8]);
+
     if ((fat_bit_offset & 7) == 0) {
         value &= 0xFFF;
     } else {
@@ -135,6 +139,38 @@ static uint32_t get_next_cluster_fat32(struct fat_fs* fs, uint32_t cluster)
     return value;
 }
 
+static int set_next_cluster_fat12(struct fat_fs* fs, uint32_t cluster,
+    uint32_t value)
+{
+    uint8_t* buf;
+    uint32_t fat_bit_offset = (cluster * 12ULL);
+    uint32_t fat_sector = fat_bit_offset / SECTOR_BITS;
+    uint16_t* pvalue;
+
+    fat_bit_offset %= SECTOR_BITS;
+
+    buf = get_fat_buffer(fs, fat_sector);
+    if (buf == NULL) {
+        return 0;
+    }
+
+    pvalue = ((uint16_t*) &buf[fat_bit_offset / 8]);
+    value &= 0xFFF;
+
+    if ((fat_bit_offset & 7) == 0) {
+        *pvalue &= ~0xFFF;
+        *pvalue |= value;
+    } else {
+        *pvalue &= ~0xFFF0;
+        *pvalue |= (value << 4);
+    }
+    fat_buf_changed = 1;
+
+    get_next_cluster_fat12(fs, cluster);
+
+    return 0;
+}
+
 static int set_next_cluster_fat16(struct fat_fs* fs, uint32_t cluster,
     uint32_t value)
 {
@@ -156,7 +192,13 @@ static int set_next_cluster_fat16(struct fat_fs* fs, uint32_t cluster,
 static int set_next_cluster(struct fat_fs* fs, uint32_t cluster,
     uint32_t value)
 {
-    return set_next_cluster_fat16(fs, cluster, value);
+    if (fs->type == FS_TYPE_FAT12) {
+        return set_next_cluster_fat12(fs, cluster, value);
+    } else if (fs->type == FS_TYPE_FAT16) {
+        return set_next_cluster_fat16(fs, cluster, value);
+    } else {
+        return -FAT_EINVAL;
+    }
 }
 
 static int fat_extend_file(struct fat_file* file, uint32_t new_size)
@@ -172,7 +214,8 @@ static int fat_extend_file(struct fat_file* file, uint32_t new_size)
         uint32_t i;
         uint32_t num_data_clusters = NUM_CLUSTERS(
             fs->total_sectors - fs->first_data_cluster,
-            cluster_size);
+            fs->bpb.cluster_sectors);
+        uint32_t free_index = 0;
 
         /* Blockliste vergroessern */
         file->blocklist = realloc(file->blocklist,
@@ -184,20 +227,31 @@ static int fat_extend_file(struct fat_file* file, uint32_t new_size)
             uint32_t j;
 
             /* Freien Cluster suchen und einhaengen */
-            for (j = 0; j < num_data_clusters; j++) {
-                if (get_next_cluster_fat16(fs, j) == 0) {
+            for (j = free_index; j < num_data_clusters; j++) {
+                if (get_next_cluster(fs, j) == 0) {
+
+                    /* Neue EOF-Markierung */
+                    file->blocklist[i] = j;
+                    ret = set_next_cluster(fs, file->blocklist[i], 0xffffffff);
+                    if (ret < 0) {
+                        return ret;
+                    }
+
+                    /* In die Clusterkette einhaengen */
                     ret = set_next_cluster(fs, file->blocklist[i - 1], j);
                     if (ret < 0) {
                         return ret;
                     }
 
-                    file->blocklist[i] = j;
+                    free_index = j;
+                    goto found;
                 }
             }
-        }
 
-        /* Der letzte Eintrag braucht eine EOF-Markierung */
-        set_next_cluster(fs, file->blocklist[i - 1], 0xffffffff);
+            return -FAT_ENOSPC;
+        found:
+            /* Weiter mit naechstem Cluster */;
+        }
 
         /* Und zuletzt veraenderte Eintraege zurueckschreiben */
         commit_fat_buffer(fs);
@@ -210,31 +264,30 @@ static int fat_extend_file(struct fat_file* file, uint32_t new_size)
     return 0;
 }
 
+static uint32_t get_next_cluster(struct fat_fs* fs, uint32_t cluster)
+{
+    switch (fs->type) {
+        case FS_TYPE_FAT12:
+            return get_next_cluster_fat12(fs, cluster);
+
+        case FS_TYPE_FAT16:
+            return get_next_cluster_fat16(fs, cluster);
+
+        case FS_TYPE_FAT32:
+            return get_next_cluster_fat32(fs, cluster);
+
+        default:
+            return -FAT_EINVAL;
+    }
+}
+
+
 int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
     struct fat_file* file)
 {
     uint32_t cluster_size = fs->bpb.cluster_sectors * 512;
     uint32_t cluster;
     uint32_t i;
-
-    /* Passende Clusterlesefunktion aussuchen */
-    uint32_t (*get_next_cluster)(struct fat_fs*, uint32_t);
-    switch (fs->type) {
-        case FS_TYPE_FAT12:
-            get_next_cluster = get_next_cluster_fat12;
-            break;
-
-        case FS_TYPE_FAT16:
-            get_next_cluster = get_next_cluster_fat16;
-            break;
-
-        case FS_TYPE_FAT32:
-            get_next_cluster = get_next_cluster_fat32;
-            break;
-
-        default:
-            return -FAT_EINVAL;
-    }
 
     /* Dateistruktur anlegen */
     file->fs = fs;

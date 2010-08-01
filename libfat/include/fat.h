@@ -10,12 +10,14 @@
 #define FAT_ENOENT  ENOENT
 #define FAT_EIO     EIO
 #define FAT_EINVAL  EINVAL
+#define FAT_ENOSPC  ENOSPC
 
 #else
 
 #define FAT_ENOENT  1
 #define FAT_EIO     2
 #define FAT_EINVAL  3
+#define FAT_ENOSPC  4
 
 #endif
 
