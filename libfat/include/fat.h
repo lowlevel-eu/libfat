@@ -238,6 +238,7 @@ struct fat_disk_dir_entry {
 
 struct fat_dir_entry {
     int index_in_dir;
+    int dir_first_cluster;
     char name[13]; /* 8.3 plus \0 */
     int first_cluster;
     int attrib;
@@ -249,6 +250,7 @@ struct fat_file;
 struct fat_dir {
     struct fat_fs* fs;
     struct fat_disk_dir_entry* entries;
+    int first_cluster;
     int i;
     int num;
 };

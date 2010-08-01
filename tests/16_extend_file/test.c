@@ -80,7 +80,6 @@ int run_test(struct fat_fs* fs)
         test_error("Konnte Datei nicht schliessen");
     }
 
-#if 0
     /* Und jetzt nochmal die Datei neu oeffnen und dann probieren */
     ret = fat_file_open(fs, "/test.txt", &file);
     if (ret < 0) {
@@ -124,7 +123,6 @@ int run_test(struct fat_fs* fs)
     if (fat_file_close(&file) < 0) {
         test_error("Konnte Datei nicht schliessen");
     }
-#endif
 
     test_fsck();
 

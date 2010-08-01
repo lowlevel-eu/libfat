@@ -26,6 +26,7 @@ static int fat_rootdir_open(struct fat_fs* fs, struct fat_dir* dir)
     dir->entries = buf;
     dir->fs = fs;
     dir->i = 0;
+    dir->first_cluster = 0;
     dir->num = rootdir_sectors * 512 / sizeof(struct fat_disk_dir_entry);
 
     return 0;
@@ -64,7 +65,41 @@ static int fat_rootdir32_open(struct fat_fs* fs, struct fat_dir* dir)
     dir->entries = buf;
     dir->fs = fs;
     dir->i = 0;
+    dir->first_cluster = 0;
     dir->num = file.size / sizeof(struct fat_disk_dir_entry);
+
+    return 0;
+}
+
+static int fat_subdir_open_by_dir_entry(struct fat_fs* fs,
+    struct fat_dir_entry* dentry, struct fat_dir* subdir)
+{
+    struct fat_file file;
+    void* buf;
+    int first_cluster;
+    int ret;
+
+    ret = fat_file_open_by_dir_entry(fs, dentry, &file);
+    if (ret < 0) {
+        return ret;
+    }
+
+    buf = malloc(file.size);
+    first_cluster = file.blocklist[0];
+
+    ret = fat_file_read(&file, buf, 0, file.size);
+    fat_file_close(&file);
+    if (ret < 0) {
+        free(buf);
+        return ret;
+    }
+
+    /* Rueckgabestruktur befuellen */
+    subdir->entries = buf;
+    subdir->fs = fs;
+    subdir->i = 0;
+    subdir->first_cluster = first_cluster;
+    subdir->num = file.size / sizeof(struct fat_disk_dir_entry);
 
     return 0;
 }
@@ -73,8 +108,6 @@ int fat_subdir_open(struct fat_fs* fs, struct fat_dir* dir, const char* path,
     struct fat_dir* subdir)
 {
     struct fat_dir_entry dentry;
-    struct fat_file file;
-    void* buf;
     int ret;
 
     /* Vaterverzeichnis nach Unterverzeichnis durchsuchen */
@@ -93,27 +126,7 @@ int fat_subdir_open(struct fat_fs* fs, struct fat_dir* dir, const char* path,
 
     /* Verzeichnis als Datei oeffnen und Eintraege laden */
 found:
-    ret = fat_file_open_by_dir_entry(fs, &dentry, &file);
-    if (ret < 0) {
-        return ret;
-    }
-
-    buf = malloc(file.size);
-
-    ret = fat_file_read(&file, buf, 0, file.size);
-    fat_file_close(&file);
-    if (ret < 0) {
-        free(buf);
-        return ret;
-    }
-
-    /* Rueckgabestruktur befuellen */
-    subdir->entries = buf;
-    subdir->fs = fs;
-    subdir->i = 0;
-    subdir->num = file.size / sizeof(struct fat_disk_dir_entry);
-
-    return 0;
+    return fat_subdir_open_by_dir_entry(fs, &dentry, subdir);
 }
 
 int fat_dir_open(struct fat_fs* fs, const char* _path, struct fat_dir* dir)
@@ -220,6 +233,7 @@ int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry)
 
     // Ungueltige Eintraege ueberspringen
     while (dir->i < dir->num && !is_valid_entry(&dir->entries[dir->i])) {
+        short_fn_to_string(&dir->entries[dir->i], entry->name);
         dir->i++;
     }
 
@@ -230,6 +244,7 @@ int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry)
 
     short_fn_to_string(&dir->entries[dir->i], entry->name);
 
+    entry->dir_first_cluster = dir->first_cluster;
     entry->index_in_dir = dir->i;
     entry->first_cluster = dir->entries[dir->i].first_cluster;
     entry->size = dir->entries[dir->i].size;
@@ -239,7 +254,7 @@ int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry)
     return 0;
 }
 
-int fat_dir_update_entry(struct fat_file* file)
+int fat_dir_update_rootdir_entry(struct fat_file* file)
 {
     struct fat_fs* fs = file->fs;
     struct fat_disk_dir_entry dentry;
@@ -270,6 +285,60 @@ int fat_dir_update_entry(struct fat_file* file)
     }
 
     return 0;
+}
+
+int fat_dir_update_subdir_entry(struct fat_file* file)
+{
+    struct fat_fs* fs = file->fs;
+    struct fat_dir_entry dentry = {
+        .first_cluster = file->dir_entry.dir_first_cluster,
+        .size = 0,
+    };
+    struct fat_disk_dir_entry file_dentry;
+    struct fat_file dir;
+    int ret;
+
+#if 0
+    if (i < 0 ||i >= dir->num) {
+        return -FAT_EINVAL;
+    }
+#endif
+
+    uint32_t offset =
+        file->dir_entry.index_in_dir * sizeof(struct fat_disk_dir_entry);
+
+
+    ret = fat_file_open_by_dir_entry(fs, &dentry, &dir);
+    if (ret < 0) {
+        return ret;
+    }
+
+    ret = fat_file_read(&dir, &file_dentry, offset,
+         sizeof(struct fat_disk_dir_entry));
+    if (ret < 0) {
+        return ret;
+    }
+
+    file_dentry.size = file->size;
+
+    ret = fat_file_write(&dir, &file_dentry, offset,
+        sizeof(struct fat_disk_dir_entry));
+    if (ret < 0) {
+        return ret;
+    }
+
+    fat_file_close(&dir);
+
+    return 0;
+}
+
+int fat_dir_update_entry(struct fat_file* file)
+{
+    if (file->dir_entry.dir_first_cluster == 0) {
+        return fat_dir_update_rootdir_entry(file);
+    } else {
+        return fat_dir_update_subdir_entry(file);
+    }
 }
 
 int fat_dir_close(struct fat_dir* dir)
