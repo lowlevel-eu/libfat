@@ -325,6 +325,7 @@ int fat_dir_update_rootdir_entry(struct fat_file* file)
     }
 
     dentry.size = file->size;
+    dentry.attrib = file->dir_entry.attrib;
     dentry.first_cluster = file->dir_entry.first_cluster;
     string_to_short_fn(&dentry, file->dir_entry.name);
 
@@ -377,6 +378,7 @@ int fat_dir_update_subdir_entry(struct fat_file* file)
 
     /* Felder aktualisieren */
     file_dentry.size = file->size;
+    file_dentry.attrib = file->dir_entry.attrib;
     file_dentry.first_cluster = file->dir_entry.first_cluster;
     string_to_short_fn(&file_dentry, file->dir_entry.name);
 
@@ -415,6 +417,7 @@ int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr)
             .dir_first_cluster = dir->first_cluster,
             .index_in_dir = 0,
             .first_cluster = 0,
+            .attrib = attr,
         },
     };
 

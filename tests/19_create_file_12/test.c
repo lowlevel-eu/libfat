@@ -142,6 +142,10 @@ int run_test(struct fat_fs* fs)
         test_error("Konnte /dir/moep nicht oeffnen");
     }
 
+    if (file.dir_entry.attrib != FAT_ATTRIB_ARCHIVE) {
+        test_error("/dir/moep hat falsche Attribute");
+    }
+
     memset(buf, 0x2a, 8192);
     ret = fat_file_write(&file, buf, 0, 8192);
     if (ret < 0) {
