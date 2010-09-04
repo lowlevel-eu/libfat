@@ -303,7 +303,10 @@ static int fat_extend_file(struct fat_file* file, uint32_t new_size)
 
     /* Dateigroesse aendern */
     file->size = new_size;
-    fat_dir_update_entry(file);
+
+    if ((file->dir_entry.attrib & FAT_ATTRIB_DIR) == 0) {
+        fat_dir_update_entry(file);
+    }
 
     return 0;
 }

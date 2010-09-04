@@ -343,6 +343,7 @@ int fat_dir_update_subdir_entry(struct fat_file* file)
     struct fat_dir_entry dentry = {
         .first_cluster = file->dir_entry.dir_first_cluster,
         .size = 0,
+        .attrib = FAT_ATTRIB_DIR,
     };
     struct fat_disk_dir_entry file_dentry;
     struct fat_file dir;
@@ -404,6 +405,7 @@ int fat_dir_update_entry(struct fat_file* file)
 int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr)
 {
     int i;
+    int ret;
 
     /* Dateistruktur faken, deren Verzeichniseintrag "geaendert" werden soll */
     struct fat_file file = {
@@ -424,12 +426,10 @@ int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr)
     }
 
     /* Ausser dem Wurzelverzeichnis koennen wir alles vergroessern */
-#if 0
     if (dir->first_cluster != 0) {
         i = dir->num;
         goto found;
     }
-#endif
 
     return -FAT_ENOENT;
 
@@ -439,7 +439,12 @@ found:
     file.dir_entry.index_in_dir = i;
 
     /* Ins Verzeichnis eintragen */
-    return fat_dir_update_entry(&file);
+    ret = fat_dir_update_entry(&file);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return 0;
 }
 
 int fat_dir_close(struct fat_dir* dir)

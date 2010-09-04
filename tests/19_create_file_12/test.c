@@ -10,12 +10,44 @@
  * Zweck: Datei erstellen (FAT 12)
  */
 
+static struct fat_fs* _fs;
+
+static int dir_has_entry(const char* path, const char* name)
+{
+    struct fat_fs* fs = _fs;
+    struct fat_dir dir;
+    struct fat_dir_entry dentry;
+    int ret;
+    int result = 0;
+
+    ret = fat_dir_open(fs, path, &dir);
+    if (ret < 0) {
+        test_error("Konnte Verzeichnis %s nicht oeffnen", path);
+    }
+
+    do {
+        ret = fat_dir_read(&dir, &dentry);
+        if (ret >= 0 && !strcmp(dentry.name, name)) {
+            result = 1;
+            break;
+        }
+    } while (ret >= 0);
+
+    if (fat_dir_close(&dir) < 0) {
+        test_error("Konnte Verzeichnis nicht schliessen");
+    }
+
+    return result;
+}
+
 int run_test(struct fat_fs* fs)
 {
     struct fat_dir dir;
     struct fat_file file;
     char buf[8192], buf2[8192];
     int ret;
+
+    _fs = fs;
 
     if (!fat_fs_mount(fs)) {
         test_error("Konnte das Dateisystem nicht mounten");
@@ -144,6 +176,34 @@ int run_test(struct fat_fs* fs)
     }
 
     test_fsck();
+
+    /*** Viele leere Dateien im Unterverzeichnis ***/
+    char filename[2] = { '\0', '\0' };
+
+    for (filename[0] = 'a'; filename[0] <= 'z'; filename[0]++) {
+        ret = fat_dir_open(fs, "/dir", &dir);
+        if (ret < 0) {
+            test_error("Konnte das Unterverzeichnis nicht oeffnen");
+        }
+
+        ret = fat_dir_create_entry(&dir, filename, 0);
+        if (ret < 0) {
+            test_error("Konnte %s nicht anlegen", filename);
+        }
+
+        ret = fat_dir_close(&dir);
+        if (ret < 0) {
+            test_error("Konnte das Unterverzeichnis nicht schliessen");
+        }
+    }
+
+    test_fsck();
+
+    for (filename[0] = 'a'; filename[0] <= 'z'; filename[0]++) {
+        if (!dir_has_entry("/dir", filename)) {
+            test_error("Datei %s fehlt", filename);
+        }
+    }
 
     return 0;
 }
