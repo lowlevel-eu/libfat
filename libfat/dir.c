@@ -213,6 +213,7 @@ static void string_to_short_fn(struct fat_disk_dir_entry* entry,
                 p = &buf[i + 1];
                 goto parse_ext;
             case '\0':
+                memset(&entry->name[i], ' ', 8 - i);
                 p = &buf[i];
                 goto parse_ext;
             default:
@@ -362,14 +363,21 @@ int fat_dir_update_subdir_entry(struct fat_file* file)
         return ret;
     }
 
-    ret = fat_file_read(&dir, &file_dentry, offset,
-         sizeof(struct fat_disk_dir_entry));
-    if (ret < 0) {
-        return ret;
+    /* Bisherigen Verzeichniseintrag laden, falls vorhanden */
+    if (offset < file->size) {
+        ret = fat_file_read(&dir, &file_dentry, offset,
+             sizeof(struct fat_disk_dir_entry));
+        if (ret < 0) {
+            return ret;
+        }
+    } else {
+        memset(&file_dentry, 0, sizeof(file_dentry));
     }
 
+    /* Felder aktualisieren */
     file_dentry.size = file->size;
-    /* FIXME name, first_cluster */
+    file_dentry.first_cluster = file->dir_entry.first_cluster;
+    string_to_short_fn(&file_dentry, file->dir_entry.name);
 
     ret = fat_file_write(&dir, &file_dentry, offset,
         sizeof(struct fat_disk_dir_entry));
@@ -391,6 +399,8 @@ int fat_dir_update_entry(struct fat_file* file)
     }
 }
 
+/* FIXME Verzeichnis lesen nach create_entry
+ * FIXME Zwei vergroessernde Aufrufe ueberschreiben sich gegenseitig */
 int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr)
 {
     int i;
@@ -400,7 +410,7 @@ int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr)
         .fs = dir->fs,
         .size = 0,
         .dir_entry = {
-            .dir_first_cluster = 0,
+            .dir_first_cluster = dir->first_cluster,
             .index_in_dir = 0,
             .first_cluster = 0,
         },
@@ -408,10 +418,18 @@ int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr)
 
     /* Freien Index im Verzeichnis suchen */
     for (i = 0; i < dir->num; i++) {
-        if (is_free_entry(&dir->entries[dir->i])) {
+        if (is_free_entry(&dir->entries[i])) {
             goto found;
         }
     }
+
+    /* Ausser dem Wurzelverzeichnis koennen wir alles vergroessern */
+#if 0
+    if (dir->first_cluster != 0) {
+        i = dir->num;
+        goto found;
+    }
+#endif
 
     return -FAT_ENOENT;
 

@@ -21,6 +21,9 @@ int run_test(struct fat_fs* fs)
         test_error("Konnte das Dateisystem nicht mounten");
     }
 
+    /*** Neue Datei im Wurzelverzeichnis ***/
+
+    /* Neue Datei anlegen */
     ret = fat_dir_open(fs, "/", &dir);
     if (ret < 0) {
         test_error("Konnte das Wurzelverzeichnis nicht oeffnen");
@@ -38,6 +41,7 @@ int run_test(struct fat_fs* fs)
 
     test_fsck();
 
+    /* Dateiinhalt schreiben */
     ret = fat_file_open(fs, "/neu.txt", &file);
     if (ret < 0) {
         test_error("Konnte neu.txt nicht oeffnen");
@@ -56,6 +60,7 @@ int run_test(struct fat_fs* fs)
 
     test_fsck();
 
+    /* Dateiinhalt testweise wieder lesen */
     ret = fat_file_open(fs, "/neu.txt", &file);
     if (ret < 0) {
         test_error("Konnte neu.txt nicht neu oeffnen");
@@ -73,6 +78,69 @@ int run_test(struct fat_fs* fs)
     ret = fat_file_close(&file);
     if (ret < 0) {
         test_error("Konnte neu.txt nicht neu schliessen");
+    }
+
+    test_fsck();
+
+
+
+    /*** Neue Datei in einem Unterverzeichnis ***/
+
+    /* Neue Datei anlegen */
+    ret = fat_dir_open(fs, "/dir", &dir);
+    if (ret < 0) {
+        test_error("Konnte das Unterverzeichnis nicht oeffnen");
+    }
+
+    ret = fat_dir_create_entry(&dir, "moep", FAT_ATTRIB_ARCHIVE);
+    if (ret < 0) {
+        test_error("Konnte /dir/moep nicht anlegen");
+    }
+
+    ret = fat_dir_close(&dir);
+    if (ret < 0) {
+        test_error("Konnte das Unterverzeichnis nicht schliessen");
+    }
+
+    test_fsck();
+
+    /* Dateiinhalt schreiben */
+    ret = fat_file_open(fs, "/dir/moep", &file);
+    if (ret < 0) {
+        test_error("Konnte /dir/moep nicht oeffnen");
+    }
+
+    memset(buf, 0x2a, 8192);
+    ret = fat_file_write(&file, buf, 0, 8192);
+    if (ret < 0) {
+        test_error("Konnte /dir/moep nicht schreiben");
+    }
+
+    ret = fat_file_close(&file);
+    if (ret < 0) {
+        test_error("Konnte /dir/moep nicht schliessen");
+    }
+
+    test_fsck();
+
+    /* Dateiinhalt testweise wieder lesen */
+    ret = fat_file_open(fs, "/dir/moep", &file);
+    if (ret < 0) {
+        test_error("Konnte /dir/moep nicht neu oeffnen");
+    }
+
+    ret = fat_file_read(&file, buf2, 0, 8192);
+    if (ret < 0) {
+        test_error("Konnte /dir/moep nicht lesen");
+    }
+
+    if (memcmp(buf, buf2, 8192)) {
+        test_error("Daten in /dir/moep stimmen nicht ueberein");
+    }
+
+    ret = fat_file_close(&file);
+    if (ret < 0) {
+        test_error("Konnte /dir/moep nicht neu schliessen");
     }
 
     test_fsck();
