@@ -273,6 +273,26 @@ static int is_valid_entry(struct fat_disk_dir_entry* entry)
     return 1;
 }
 
+static void dir_entry_from_disk(struct fat_dir_entry* entry,
+    struct fat_disk_dir_entry* disk_entry)
+{
+    short_fn_to_string(disk_entry, entry->name);
+
+    entry->first_cluster        = disk_entry->first_cluster;
+    entry->size                 = disk_entry->size;
+    entry->attrib               = disk_entry->attrib;
+}
+
+static void dir_entry_to_disk(struct fat_file* file,
+    struct fat_disk_dir_entry* disk_entry)
+{
+    string_to_short_fn(disk_entry, file->dir_entry.name);
+
+    disk_entry->first_cluster   = file->dir_entry.first_cluster;
+    disk_entry->size            = file->size;
+    disk_entry->attrib          = file->dir_entry.attrib;
+}
+
 int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry)
 {
     if (dir->i < 0 || dir->i >= dir->num) {
@@ -290,15 +310,12 @@ int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry)
         return -1;
     }
 
-    short_fn_to_string(&dir->entries[dir->i], entry->name);
-
-    entry->dir_first_cluster = dir->first_cluster;
-    entry->index_in_dir = dir->i;
-    entry->first_cluster = dir->entries[dir->i].first_cluster;
-    entry->size = dir->entries[dir->i].size;
-    entry->attrib = dir->entries[dir->i].attrib;
+    dir_entry_from_disk(entry, &dir->entries[dir->i]);
+    entry->dir_first_cluster    = dir->first_cluster;
+    entry->index_in_dir         = dir->i;
 
     dir->i++;
+
     return 0;
 }
 
@@ -324,10 +341,7 @@ int fat_dir_update_rootdir_entry(struct fat_file* file)
         return -FAT_EIO;
     }
 
-    dentry.size = file->size;
-    dentry.attrib = file->dir_entry.attrib;
-    dentry.first_cluster = file->dir_entry.first_cluster;
-    string_to_short_fn(&dentry, file->dir_entry.name);
+    dir_entry_to_disk(file, &dentry);
 
     if (!fs->dev_write(offset, sizeof(struct fat_disk_dir_entry), &dentry,
         fs->dev_private))
@@ -377,10 +391,7 @@ int fat_dir_update_subdir_entry(struct fat_file* file)
     }
 
     /* Felder aktualisieren */
-    file_dentry.size = file->size;
-    file_dentry.attrib = file->dir_entry.attrib;
-    file_dentry.first_cluster = file->dir_entry.first_cluster;
-    string_to_short_fn(&file_dentry, file->dir_entry.name);
+    dir_entry_to_disk(file, &file_dentry);
 
     ret = fat_file_write(&dir, &file_dentry, offset,
         sizeof(struct fat_disk_dir_entry));
