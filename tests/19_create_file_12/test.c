@@ -14,6 +14,7 @@ int run_test(struct fat_fs* fs)
 {
     struct fat_dir dir;
     struct fat_file file;
+    char buf[8192], buf2[8192];
     int ret;
 
     if (!fat_fs_mount(fs)) {
@@ -35,14 +36,43 @@ int run_test(struct fat_fs* fs)
         test_error("Konnte das Wurzelverzeichnis nicht schliessen");
     }
 
+    test_fsck();
+
     ret = fat_file_open(fs, "/neu.txt", &file);
     if (ret < 0) {
         test_error("Konnte neu.txt nicht oeffnen");
     }
 
+    memset(buf, 0xa5, 8192);
+    ret = fat_file_write(&file, buf, 0, 8192);
+    if (ret < 0) {
+        test_error("Konnte neu.txt nicht schreiben");
+    }
+
     ret = fat_file_close(&file);
     if (ret < 0) {
         test_error("Konnte neu.txt nicht schliessen");
+    }
+
+    test_fsck();
+
+    ret = fat_file_open(fs, "/neu.txt", &file);
+    if (ret < 0) {
+        test_error("Konnte neu.txt nicht neu oeffnen");
+    }
+
+    ret = fat_file_read(&file, buf2, 0, 8192);
+    if (ret < 0) {
+        test_error("Konnte neu.txt nicht lesen");
+    }
+
+    if (memcmp(buf, buf2, 8192)) {
+        test_error("Daten stimmen nicht ueberein");
+    }
+
+    ret = fat_file_close(&file);
+    if (ret < 0) {
+        test_error("Konnte neu.txt nicht neu schliessen");
     }
 
     test_fsck();

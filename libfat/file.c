@@ -243,9 +243,14 @@ static int fat_extend_file(struct fat_file* file, uint32_t new_size)
     size_t new_blocklist_size = NUM_CLUSTERS(new_size, cluster_size);
     int ret;
 
-    /* TODO Ersten Cluster allozieren */
-    if (0) {
+    /* Ersten Cluster der Kette allozieren */
+    if (file->blocklist == NULL) {
         fat_file_alloc_first_cluster(file);
+
+        old_blocklist_size = 1;
+        file->blocklist_size = 1;
+        file->blocklist = malloc(sizeof(*file->blocklist));
+        file->blocklist[0] = file->dir_entry.first_cluster;
     }
 
     /* Wenn noetig, neue Cluster allozieren */
