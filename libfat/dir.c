@@ -200,15 +200,62 @@ static void short_fn_to_string(struct fat_disk_dir_entry* entry, char* buf)
     buf[pos] = '\0';
 }
 
-static int is_valid_entry(struct fat_disk_dir_entry* entry)
+static void string_to_short_fn(struct fat_disk_dir_entry* entry,
+    const char* buf)
+{
+    int i;
+    const char* p;
+
+    for (i = 0; i < 8; i++) {
+        switch (buf[i]) {
+            case '.':
+                memset(&entry->name[i], ' ', 8 - i);
+                p = &buf[i + 1];
+                goto parse_ext;
+            case '\0':
+                p = &buf[i];
+                goto parse_ext;
+            default:
+                entry->name[i] = toupper(buf[i]);
+                break;
+        }
+    }
+
+    p = strchr(&buf[8], '.');
+parse_ext:
+    if (!p || !*p) {
+        memset(entry->ext, ' ', 3);
+        return;
+    }
+
+    for (i = 0; i < 3; i++) {
+        if (p[i] == '\0') {
+            memset(&entry->ext[i], ' ', 3 - i);
+            return;
+        }
+        entry->ext[i] = toupper(p[i]);
+    }
+}
+
+static int is_free_entry(struct fat_disk_dir_entry* entry)
 {
     // Die Datei existiert nicht
     if (entry->name[0] == '\0') {
-        return 0;
+        return 1;
     }
 
     // Die Datei ist geloescht
     if (entry->name[0] == (char) 0xE5) {
+        return 1;
+    }
+
+    return 0;
+}
+
+static int is_valid_entry(struct fat_disk_dir_entry* entry)
+{
+    // Die Datei existiert nicht oder ist geloescht
+    if (is_free_entry(entry)) {
         return 0;
     }
 
@@ -277,6 +324,8 @@ int fat_dir_update_rootdir_entry(struct fat_file* file)
     }
 
     dentry.size = file->size;
+    dentry.first_cluster = file->dir_entry.first_cluster;
+    string_to_short_fn(&dentry, file->dir_entry.name);
 
     if (!fs->dev_write(offset, sizeof(struct fat_disk_dir_entry), &dentry,
         fs->dev_private))
@@ -320,6 +369,7 @@ int fat_dir_update_subdir_entry(struct fat_file* file)
     }
 
     file_dentry.size = file->size;
+    /* FIXME name, first_cluster */
 
     ret = fat_file_write(&dir, &file_dentry, offset,
         sizeof(struct fat_disk_dir_entry));
@@ -339,6 +389,39 @@ int fat_dir_update_entry(struct fat_file* file)
     } else {
         return fat_dir_update_subdir_entry(file);
     }
+}
+
+int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr)
+{
+    int i;
+
+    /* Dateistruktur faken, deren Verzeichniseintrag "geaendert" werden soll */
+    struct fat_file file = {
+        .fs = dir->fs,
+        .size = 0,
+        .dir_entry = {
+            .dir_first_cluster = 0,
+            .index_in_dir = 0,
+            .first_cluster = 0,
+        },
+    };
+
+    /* Freien Index im Verzeichnis suchen */
+    for (i = 0; i < dir->num; i++) {
+        if (is_free_entry(&dir->entries[dir->i])) {
+            goto found;
+        }
+    }
+
+    return -FAT_ENOENT;
+
+found:
+    strncpy(file.dir_entry.name, name, sizeof(file.dir_entry.name));
+    file.dir_entry.name[sizeof(file.dir_entry.name) - 1] = '\0';
+    file.dir_entry.index_in_dir = i;
+
+    /* Ins Verzeichnis eintragen */
+    return fat_dir_update_entry(&file);
 }
 
 int fat_dir_close(struct fat_dir* dir)

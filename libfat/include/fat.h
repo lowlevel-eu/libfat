@@ -259,6 +259,7 @@ struct fat_dir {
 
 int fat_dir_open(struct fat_fs* fs, const char* path, struct fat_dir* dir);
 int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry);
+int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr);
 int fat_dir_update_entry(struct fat_file* file);
 int fat_dir_close(struct fat_dir* dir);
 

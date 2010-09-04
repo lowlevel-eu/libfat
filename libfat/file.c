@@ -27,6 +27,7 @@ static uint8_t* get_fat_buffer(struct fat_fs* fs, uint32_t sector)
         return fat_buf;
     }
 
+    /* FIXME Write back changed entries before overwriting them */
     /* TODO Evtl. reicht memcpy und lesen nur eines Sektors */
     if (!fs->dev_read(sector * 512, 1024, fat_buf, fs->dev_private)) {
         fat_buf_fs = NULL;
@@ -201,6 +202,39 @@ static int set_next_cluster(struct fat_fs* fs, uint32_t cluster,
     }
 }
 
+static int fat_file_alloc_first_cluster(struct fat_file* file)
+{
+    struct fat_fs* fs = file->fs;
+    uint32_t num_data_clusters = NUM_CLUSTERS(
+        fs->total_sectors - fs->first_data_cluster,
+        fs->bpb.cluster_sectors);
+    uint32_t j;
+    int ret;
+
+    /* Freien Cluster suchen und einhaengen */
+    for (j = 0; j < num_data_clusters; j++) {
+        if (get_next_cluster(fs, j) == 0) {
+            goto found;
+        }
+    }
+
+    return -FAT_ENOSPC;
+
+    /* EOF-Markierung in die FAT eintragen */
+found:
+    ret = set_next_cluster(fs, j, 0xffffffff);
+    if (ret < 0) {
+        return ret;
+    }
+
+    commit_fat_buffer(fs);
+
+    /* Cluster der Datei zuordnen */
+    file->dir_entry.first_cluster = j;
+
+    return 0;
+}
+
 static int fat_extend_file(struct fat_file* file, uint32_t new_size)
 {
     struct fat_fs* fs = file->fs;
@@ -208,6 +242,11 @@ static int fat_extend_file(struct fat_file* file, uint32_t new_size)
     size_t old_blocklist_size = file->blocklist_size;
     size_t new_blocklist_size = NUM_CLUSTERS(new_size, cluster_size);
     int ret;
+
+    /* TODO Ersten Cluster allozieren */
+    if (0) {
+        fat_file_alloc_first_cluster(file);
+    }
 
     /* Wenn noetig, neue Cluster allozieren */
     if (new_blocklist_size != old_blocklist_size) {
@@ -293,6 +332,13 @@ int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
     file->fs = fs;
     file->size = entry->size;
     file->dir_entry = *entry;
+
+    /* Eine leere Datei braucht keine Blockliste */
+    if (entry->first_cluster == 0) {
+        file->blocklist = NULL;
+        file->blocklist_size = 0;
+        return 0;
+    }
 
     /*
      * Blockliste anlegen und einlesen. Bei Groesse 0 (z.B. Verzeichnisse gehen
