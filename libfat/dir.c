@@ -84,6 +84,15 @@ static int fat_subdir_open_by_dir_entry(struct fat_fs* fs,
         return ret;
     }
 
+    /*
+     * Ein Verzeichnis ohne Cluster ist ein korruptes FS, fehlschlagen ist also
+     * in Ordnung. Wir sollten nur nicht auf file.blocklist[0] zugreifen.
+     */
+    if (file.blocklist == NULL) {
+        fat_file_close(&file);
+        return -FAT_ENOENT;
+    }
+
     buf = malloc(file.size);
     first_cluster = file.blocklist[0];
 
