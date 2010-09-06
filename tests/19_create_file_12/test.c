@@ -44,6 +44,7 @@ int run_test(struct fat_fs* fs)
 {
     struct fat_dir dir;
     struct fat_file file;
+    struct fat_dir_entry dentry;
     char buf[8192], buf2[8192];
     int ret;
 
@@ -61,7 +62,7 @@ int run_test(struct fat_fs* fs)
         test_error("Konnte das Wurzelverzeichnis nicht oeffnen");
     }
 
-    ret = fat_dir_create_entry(&dir, "neu.txt", 0);
+    ret = fat_dir_create_entry(&dir, "neu.txt", 0, NULL);
     if (ret < 0) {
         test_error("Konnte neu.txt nicht anlegen");
     }
@@ -124,7 +125,7 @@ int run_test(struct fat_fs* fs)
         test_error("Konnte das Unterverzeichnis nicht oeffnen");
     }
 
-    ret = fat_dir_create_entry(&dir, "moep", FAT_ATTRIB_ARCHIVE);
+    ret = fat_dir_create_entry(&dir, "moep", FAT_ATTRIB_ARCHIVE, &dentry);
     if (ret < 0) {
         test_error("Konnte /dir/moep nicht anlegen");
     }
@@ -135,6 +136,19 @@ int run_test(struct fat_fs* fs)
     }
 
     test_fsck();
+
+    if (dentry.dir_first_cluster != dir.first_cluster) {
+        test_error("dentry.dir_first_cluster falsch");
+    }
+    if (strcmp(dentry.name, "moep")) {
+        test_error("dentry.name falsch");
+    }
+    if (dentry.attrib != FAT_ATTRIB_ARCHIVE) {
+        test_error("dentry.attrib falsch");
+    }
+    if (dentry.size != 0) {
+        test_error("dentry.size falsch");
+    }
 
     /* Dateiinhalt schreiben */
     ret = fat_file_open(fs, "/dir/moep", &file);
@@ -190,7 +204,7 @@ int run_test(struct fat_fs* fs)
             test_error("Konnte das Unterverzeichnis nicht oeffnen");
         }
 
-        ret = fat_dir_create_entry(&dir, filename, 0);
+        ret = fat_dir_create_entry(&dir, filename, 0, NULL);
         if (ret < 0) {
             test_error("Konnte %s nicht anlegen", filename);
         }

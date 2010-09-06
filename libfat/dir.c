@@ -424,7 +424,8 @@ int fat_dir_update_entry(struct fat_file* file)
 
 /* FIXME Verzeichnis lesen nach create_entry
  * FIXME Zwei vergroessernde Aufrufe ueberschreiben sich gegenseitig */
-int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr)
+int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr,
+    struct fat_dir_entry* dir_entry)
 {
     int i;
     int ret;
@@ -465,6 +466,10 @@ found:
     ret = fat_dir_update_entry(&file);
     if (ret < 0) {
         return ret;
+    }
+
+    if (dir_entry) {
+        *dir_entry = file.dir_entry;
     }
 
     return 0;
