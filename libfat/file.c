@@ -619,7 +619,7 @@ int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
     return fat_file_rw(file, buf, offset, len, 0);
 }
 
-int32_t fat_file_write(struct fat_file* file, void *buf, uint32_t offset,
+int32_t fat_file_write(struct fat_file* file, const void* buf, uint32_t offset,
     size_t len)
 {
     int ret;
@@ -632,7 +632,7 @@ int32_t fat_file_write(struct fat_file* file, void *buf, uint32_t offset,
         }
     }
 
-    return fat_file_rw(file, buf, offset, len, 1);
+    return fat_file_rw(file, (void*) buf, offset, len, 1);
 }
 
 int fat_file_close(struct fat_file* file)
