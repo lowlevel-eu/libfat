@@ -202,7 +202,7 @@ static int set_next_cluster(struct fat_fs* fs, uint32_t cluster,
     }
 }
 
-static int fat_file_alloc_first_cluster(struct fat_file* file)
+int fat_file_alloc_first_cluster(struct fat_file* file)
 {
     struct fat_fs* fs = file->fs;
     uint32_t num_data_clusters = NUM_CLUSTERS(
@@ -301,9 +301,8 @@ static int fat_extend_file(struct fat_file* file, uint32_t new_size)
         commit_fat_buffer(fs);
     }
 
-    /* Dateigroesse aendern */
+    /* Dateigroesse anpassen und ggf. neuen ersten Cluster eintragen */
     file->size = new_size;
-
     if ((file->dir_entry.attrib & FAT_ATTRIB_DIR) == 0) {
         fat_dir_update_entry(file);
     }

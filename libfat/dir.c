@@ -423,7 +423,8 @@ int fat_dir_update_entry(struct fat_file* file)
 }
 
 /* FIXME Verzeichnis lesen nach create_entry
- * FIXME Zwei vergroessernde Aufrufe ueberschreiben sich gegenseitig */
+ * FIXME Zwei vergroessernde Aufrufe ueberschreiben sich gegenseitig
+ * FIXME Verzeichnis erweitern auf neuen nicht genullten Cluster */
 int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr,
     struct fat_dir_entry* dir_entry)
 {
@@ -462,6 +463,10 @@ found:
     file.dir_entry.name[sizeof(file.dir_entry.name) - 1] = '\0';
     file.dir_entry.index_in_dir = i;
 
+    if (attr & FAT_ATTRIB_DIR) {
+        fat_file_alloc_first_cluster(&file);
+    }
+
     /* Ins Verzeichnis eintragen */
     ret = fat_dir_update_entry(&file);
     if (ret < 0) {
@@ -473,6 +478,55 @@ found:
     }
 
     return 0;
+}
+
+int fat_dir_create(struct fat_dir* dir, const char* name,
+    struct fat_dir_entry* dir_entry)
+{
+    struct fat_file dir_file;
+    struct fat_dir_entry dentry;
+    int ret;
+    uint32_t cluster_size = dir->fs->bpb.cluster_sectors * 512;
+    uint8_t buf[cluster_size];
+    struct fat_disk_dir_entry* disk_dentry;
+
+    /* Verzeichnis anlegen */
+    ret = fat_dir_create_entry(dir, name, FAT_ATTRIB_DIR, &dentry);
+    if (ret < 0) {
+        return ret;
+    }
+
+    /* Und einen genullten Cluster reservieren */
+    ret = fat_file_open_by_dir_entry(dir->fs, &dentry, &dir_file);
+    if (ret < 0) {
+        return ret;
+    }
+
+    disk_dentry = (struct fat_disk_dir_entry*) buf;
+    memset(buf, 0, cluster_size);
+    disk_dentry[0] = (struct fat_disk_dir_entry) {
+        .name           = ".       ",
+        .ext            = "   ",
+        .attrib         = FAT_ATTRIB_DIR,
+        .first_cluster  = dentry.first_cluster,
+        .size           = 0,
+    };
+    disk_dentry[1] = (struct fat_disk_dir_entry) {
+        .name           = "..      ",
+        .ext            = "   ",
+        .attrib         = FAT_ATTRIB_DIR,
+        .first_cluster  = dir->first_cluster,
+        .size           = 0,
+    };
+
+    ret = fat_file_write(&dir_file, buf, 0, cluster_size);
+    fat_file_close(&dir_file);
+
+    if (dir_entry) {
+        *dir_entry = dentry;
+    }
+
+    return ret;
 }
 
 int fat_dir_close(struct fat_dir* dir)

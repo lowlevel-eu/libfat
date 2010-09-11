@@ -261,6 +261,8 @@ int fat_dir_open(struct fat_fs* fs, const char* path, struct fat_dir* dir);
 int fat_dir_read(struct fat_dir* dir, struct fat_dir_entry* entry);
 int fat_dir_create_entry(struct fat_dir* dir, const char* name, int attr,
     struct fat_dir_entry* dir_entry);
+int fat_dir_create(struct fat_dir* dir, const char* name,
+    struct fat_dir_entry* dir_entry);
 int fat_dir_update_entry(struct fat_file* file);
 int fat_dir_close(struct fat_dir* dir);
 
@@ -275,6 +277,7 @@ struct fat_file {
 int fat_file_open(struct fat_fs* fs, const char* path, struct fat_file* file);
 int fat_file_open_by_dir_entry(struct fat_fs* fs, struct fat_dir_entry* entry,
     struct fat_file* file);
+int fat_file_alloc_first_cluster(struct fat_file* file);
 int32_t fat_file_read(struct fat_file* file, void* buf, uint32_t offset,
     size_t len);
 int32_t fat_file_write(struct fat_file* file, const void* buf, uint32_t offset,
